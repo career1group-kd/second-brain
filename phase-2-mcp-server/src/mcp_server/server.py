@@ -19,6 +19,7 @@ from .config import Settings, get_settings
 from .gtasks_client import GoogleTasksClient
 from .logging_setup import setup_logging
 from .meetgeek.webhook import make_router as make_meetgeek_router
+from .oauth import build_oauth_provider
 from .qdrant_client import VaultIndex
 from .rerank_cache import RerankCache
 from .tools import gtasks as gtasks_tools
@@ -259,6 +260,8 @@ def _log_config_summary(settings: Settings) -> None:
         qdrant_collection=settings.qdrant_collection,
         voyage_api_key_set=bool(settings.voyage_api_key),
         bearer_token_set=bool(settings.bearer_token),
+        google_oauth_enabled=settings.google_oauth_enabled,
+        allowed_emails_count=len(settings.allowed_emails_set),
         gtasks_token_present=settings.gtasks_token_path.exists(),
         gtasks_key_set=bool(settings.gtasks_token_key),
         meetgeek_secret_set=bool(settings.meetgeek_webhook_secret),
@@ -279,7 +282,23 @@ def build_app(settings: Settings | None = None):
     setup_logging(settings.log_level)
     _log_config_summary(settings)
 
-    mcp = FastMCP(name="second-brain")
+    # Build OAuth provider first so it can be passed into FastMCP. It
+    # registers its own /authorize, /token, /register, /auth/callback
+    # routes and a token-verification middleware on the MCP routes.
+    oauth_provider = None
+    try:
+        oauth_provider = build_oauth_provider(settings)
+    except Exception:
+        log.exception("oauth_provider_init_failed")
+        # Don't fall back to open access on misconfiguration. If OAuth
+        # was meant to be on, refuse to issue tokens by leaving the
+        # provider None and letting Bearer middleware (or no auth) handle
+        # the rest. The deploy logs will show the traceback.
+
+    mcp_kwargs: dict[str, Any] = {"name": "second-brain"}
+    if oauth_provider is not None:
+        mcp_kwargs["auth"] = oauth_provider
+    mcp = FastMCP(**mcp_kwargs)
 
     ctx: ServerContext | None = None
     try:
@@ -310,7 +329,14 @@ def build_app(settings: Settings | None = None):
         except Exception:
             log.exception("meetgeek_router_failed")
 
-    if settings.bearer_token:
+    # Auth middleware selection:
+    # - OAuth provider: FastMCP wires its own token verifier on MCP
+    #   routes; we leave bearer middleware off entirely.
+    # - No OAuth: fall back to legacy bearer for backwards-compat.
+    if oauth_provider is not None:
+        log.info("auth_mode", mode="google_oauth")
+    elif settings.bearer_token:
+        log.info("auth_mode", mode="bearer")
         app.add_middleware(
             BearerAuthMiddleware,
             token=settings.bearer_token,
@@ -318,7 +344,8 @@ def build_app(settings: Settings | None = None):
         )
     else:
         log.warning(
-            "bearer_token_not_set; SSE endpoint is open. Set BEARER_TOKEN."
+            "auth_mode_open; no auth configured. Set GOOGLE_OAUTH_CLIENT_ID "
+            "or BEARER_TOKEN to gate /sse."
         )
 
     return app

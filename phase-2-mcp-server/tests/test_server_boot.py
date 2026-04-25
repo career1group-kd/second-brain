@@ -51,3 +51,36 @@ def test_health_route_registered_in_router(tmp_path: Path) -> None:
     app = build_app(_settings(tmp_path))
     paths = {getattr(r, "path", None) for r in app.router.routes}
     assert "/health" in paths
+
+
+def test_oauth_mode_exposes_authorization_endpoints(tmp_path: Path) -> None:
+    """When Google OAuth is configured, /authorize + /token must be wired."""
+    app = build_app(
+        _settings(
+            tmp_path,
+            google_oauth_client_id="x.apps.googleusercontent.com",
+            google_oauth_client_secret="GOCSPX-abc",
+            oauth_base_url="https://example.com",
+            allowed_emails="kay@example.com",
+            oauth_storage_dir=tmp_path / "oauth",
+        )
+    )
+    paths = {getattr(r, "path", None) for r in app.router.routes}
+    assert "/authorize" in paths
+    assert "/token" in paths
+
+
+def test_oauth_mode_health_still_public(tmp_path: Path) -> None:
+    app = build_app(
+        _settings(
+            tmp_path,
+            google_oauth_client_id="x.apps.googleusercontent.com",
+            google_oauth_client_secret="GOCSPX-abc",
+            oauth_base_url="https://example.com",
+            allowed_emails="kay@example.com",
+            oauth_storage_dir=tmp_path / "oauth",
+        )
+    )
+    with TestClient(app) as client:
+        resp = client.get("/health")
+        assert resp.status_code == 200

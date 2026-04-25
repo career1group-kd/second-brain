@@ -30,6 +30,21 @@ class Settings(BaseSettings):
     public_domain: str = "mcp.example.com"
     log_level: str = "INFO"
 
+    # --- Google OAuth (per-user authentication for Claude.ai) -----------
+    # When set, the SSE endpoint requires Google login instead of (or in
+    # addition to) BEARER_TOKEN. Only emails listed in `allowed_emails`
+    # may complete the flow; others are rejected at token issuance.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    oauth_base_url: str = ""
+    # Comma-separated list of allowed Google account emails. Empty means
+    # the OAuth flow is disabled (no whitelist = nobody) when an OAuth
+    # client_id is configured.
+    allowed_emails: str = ""
+    # Persistent storage for DCR client registrations. Survives redeploys
+    # so Claude.ai doesn't have to re-register on every container restart.
+    oauth_storage_dir: Path = Path("/data/state/oauth")
+
     # Phase 4 — Google Tasks
     google_client_secrets_path: Path = Path("/data/secrets/google_client_secret.json")
     gtasks_token_path: Path = Path("/data/secrets/gtasks_token.enc")
@@ -38,6 +53,14 @@ class Settings(BaseSettings):
     # Phase 5 — MeetGeek
     meetgeek_webhook_secret: str = ""
     meetgeek_api_token: str = ""
+
+    @property
+    def allowed_emails_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
 
 
 _settings: Settings | None = None
