@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     # Set to False only for emergency deploys where /health must stay up
     # even with a broken tool layer.
     fail_fast_on_tool_registration: bool = True
+
+    @field_validator("qdrant_url")
+    @classmethod
+    def _validate_qdrant_url(cls, v: str) -> str:
+        if not v or not v.startswith(("http://", "https://")):
+            raise ValueError(
+                f"QDRANT_URL must be a full http:// or https:// URL (got: {v!r}). "
+                "The default 'http://qdrant:6333' only works inside Docker Compose; "
+                "set QDRANT_URL to your Qdrant Cloud or Railway-internal endpoint."
+            )
+        return v
 
     @property
     def allowed_emails_set(self) -> set[str]:

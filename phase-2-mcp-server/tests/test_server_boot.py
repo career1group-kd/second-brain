@@ -87,6 +87,19 @@ def test_oauth_mode_health_still_public(tmp_path: Path) -> None:
         assert resp.status_code == 200
 
 
+def test_invalid_qdrant_url_raises_at_settings_instantiation(tmp_path: Path) -> None:
+    """Settings must reject a QDRANT_URL that lacks http/https so the error
+    surfaces before the try/except in build_app() can swallow it."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="QDRANT_URL must be a full"):
+        Settings(
+            vault_path=tmp_path,
+            qdrant_url="qdrant:6333",  # missing protocol — common Railway mistake
+            voyage_api_key="",
+        )
+
+
 def test_fail_fast_raises_when_context_errors(tmp_path: Path) -> None:
     """With FAIL_FAST_ON_TOOL_REGISTRATION=True, build_app() must propagate
     any exception from the tool-registration phase so Railway sees it."""
