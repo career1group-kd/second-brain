@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "second-brain-livesync-bridge"
+version = "0.1.0"
+description = "Bidirectional bridge between an obsidian-livesync CouchDB and a vault filesystem."
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "watchdog>=4.0.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "structlog>=24.1.0",
+    "tenacity>=8.3.0",
+    "click>=8.1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0",
+]
+
+[project.scripts]
+livesync-bridge = "livesync_bridge.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"

@@ -12,10 +12,12 @@ See [docs/architecture.md](docs/architecture.md) for the full architecture, road
 | `phase-0-vault/` | 0 | Vault skeleton generator (`init_vault.py`) |
 | `phase-1-ingestion/` | 1 | File watcher, chunker, embedder, Qdrant indexer |
 | `phase-2-mcp-server/` | 2–5 | MCP server (read + write tools, Google Tasks, MeetGeek webhook) |
+| `phase-6-livesync-bridge/` | 6 | CouchDB ↔ filesystem sync for obsidian-livesync |
+| `deploy/railway/` | – | Railway deployment artifacts (combined Dockerfile, supervisord, READMEs) |
 
 Each phase is self-contained and includes its own README, `pyproject.toml`, and Docker setup where applicable.
 
-## Quick start
+## Quick start (local development)
 
 ```bash
 # Phase 0: generate a vault
@@ -31,5 +33,13 @@ docker compose up -d
 cd ../phase-2-mcp-server
 docker compose up -d
 ```
+
+## Deploying on Railway
+
+For the production deployment with multi-device LiveSync, see
+[`deploy/railway/README.md`](deploy/railway/README.md). It covers all
+three Railway services (Qdrant, CouchDB, combined `second-brain`),
+Obsidian LiveSync setup, Claude.ai connector registration, and
+MeetGeek wiring.
 
 See each phase's `README.md` for details.

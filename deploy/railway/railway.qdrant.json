@@ -1,0 +1,17 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "IMAGE",
+    "image": "qdrant/qdrant:latest"
+  },
+  "deploy": {
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5,
+    "volumes": [
+      {
+        "mountPath": "/qdrant/storage",
+        "name": "qdrant-storage"
+      }
+    ]
+  }
+}
