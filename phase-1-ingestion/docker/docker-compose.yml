@@ -1,0 +1,41 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  couchdb:
+    image: couchdb:3
+    restart: unless-stopped
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+      - couchdb_config:/opt/couchdb/etc/local.d
+
+  watcher:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    depends_on:
+      - qdrant
+    volumes:
+      - ${VAULT_PATH}:/data/vault:ro
+    environment:
+      VAULT_PATH: /data/vault
+      QDRANT_URL: http://qdrant:6333
+
+volumes:
+  qdrant_storage:
+  couchdb_data:
+  couchdb_config:
