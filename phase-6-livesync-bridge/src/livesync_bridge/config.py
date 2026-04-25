@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     couchdb_user: str = ""
     couchdb_password: str = ""
     couchdb_db: str = "obsidian"
+    # Doc-ID prefix for vault-file documents. Empty matches modern
+    # obsidian-livesync (>= 0.23) which stores the bare path as ID.
+    # Set to "f:" if you target an older plugin version.
+    couchdb_file_prefix: str = ""
 
     vault_path: Path = Field(default=Path("/data/vault"))
 

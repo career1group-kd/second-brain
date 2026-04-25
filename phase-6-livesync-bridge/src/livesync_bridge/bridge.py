@@ -195,7 +195,7 @@ class LiveSyncBridge:
         doc_id = doc.get("_id", "")
         if not encoding.is_file_doc(doc_id):
             return
-        path = encoding.doc_id_to_path(doc_id)
+        path = encoding.doc_id_to_path(doc_id, doc)
         if path is None or self._is_path_excluded(path):
             return
 
@@ -250,9 +250,9 @@ class LiveSyncBridge:
         if self.db_to_fs.matches(rel, h):
             return  # echo
 
-        doc_id = encoding.path_to_doc_id(rel)
+        doc_id = encoding.path_to_doc_id(rel, prefix=self.settings.couchdb_file_prefix)
         existing = await self.couch.get_doc(doc_id)
-        body = encoding.render_plain(content)
+        body = encoding.render_plain(content, path=rel)
         body["_id"] = doc_id
         if existing and "_rev" in existing:
             body["_rev"] = existing["_rev"]
@@ -262,7 +262,7 @@ class LiveSyncBridge:
         log.info("livesync_couch_write", path=rel, bytes=len(content))
 
     async def delete_path(self, rel: str) -> None:
-        doc_id = encoding.path_to_doc_id(rel)
+        doc_id = encoding.path_to_doc_id(rel, prefix=self.settings.couchdb_file_prefix)
         existing = await self.couch.get_doc(doc_id)
         if not existing or "_rev" not in existing:
             return

@@ -36,6 +36,8 @@ ENV/
 *.enc
 secrets/
 google_client_secret.json
+client_secret.json
+client_secret_*.json
 gtasks_token.enc
 
 # Test artifacts

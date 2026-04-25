@@ -17,14 +17,54 @@ def test_doc_id_to_path_returns_none_for_chunks() -> None:
     assert encoding.doc_id_to_path("h:abc123") is None
 
 
-def test_path_to_doc_id_default_prefix() -> None:
-    assert encoding.path_to_doc_id("a/b.md") == "f:a/b.md"
+def test_doc_id_to_path_returns_none_for_system_docs() -> None:
+    assert encoding.doc_id_to_path("_local/something") is None
+    assert encoding.doc_id_to_path("_design/foo") is None
+    assert encoding.doc_id_to_path("obsydian_livesync_version") is None
+    assert encoding.doc_id_to_path("obsydian_livesync_milestone") is None
+
+
+def test_doc_id_to_path_bareformat_uses_doc_path_field() -> None:
+    # New livesync stores the lowercased path as ID and the original-case
+    # path in the doc body. Prefer the body field.
+    doc = {"_id": "willkommen.md", "path": "Willkommen.md", "type": "plain"}
+    assert encoding.doc_id_to_path("willkommen.md", doc) == "Willkommen.md"
+
+
+def test_doc_id_to_path_bareformat_falls_back_to_id() -> None:
+    assert encoding.doc_id_to_path("willkommen.md") == "willkommen.md"
+    assert encoding.doc_id_to_path("willkommen.md", {}) == "willkommen.md"
+
+
+def test_path_to_doc_id_default_no_prefix() -> None:
+    # Modern livesync expects the bare lowercased path as ID.
+    assert encoding.path_to_doc_id("A/B.md") == "a/b.md"
+    assert encoding.path_to_doc_id("Notes/Foo.md") == "notes/foo.md"
+
+
+def test_path_to_doc_id_with_legacy_prefix() -> None:
+    assert encoding.path_to_doc_id("a/b.md", prefix="f:") == "f:a/b.md"
 
 
 def test_is_file_and_chunk_doc() -> None:
     assert encoding.is_file_doc("f:foo.md")
     assert not encoding.is_file_doc("h:bar")
     assert encoding.is_chunk_doc("h:bar")
+
+
+def test_is_file_doc_recognizes_bare_path_format() -> None:
+    assert encoding.is_file_doc("willkommen.md")
+    assert encoding.is_file_doc("10_projects/x.md")
+    assert encoding.is_file_doc("weitere notiz.md")
+
+
+def test_is_file_doc_rejects_system_and_metadata() -> None:
+    assert not encoding.is_file_doc("")
+    assert not encoding.is_file_doc("h:abc123")
+    assert not encoding.is_file_doc("_local/foo")
+    assert not encoding.is_file_doc("_design/bar")
+    assert not encoding.is_file_doc("obsydian_livesync_version")
+    assert not encoding.is_file_doc("obsidian_livesync_anything")
 
 
 def test_reassemble_single_doc_plain() -> None:
@@ -66,6 +106,12 @@ def test_render_plain_round_trips() -> None:
     assert payload["type"] == "plain"
     assert payload["data"] == "# Title\n\nbody"
     assert payload["size"] == len(b"# Title\n\nbody")
+    assert "path" not in payload
+
+
+def test_render_plain_includes_path_when_given() -> None:
+    payload = encoding.render_plain(b"x", path="Notes/Foo.md")
+    assert payload["path"] == "Notes/Foo.md"
 
 
 def test_is_markdown_path() -> None:
