@@ -9,7 +9,7 @@ description = "MCP server connecting Claude.ai to the Second Brain vault."
 requires-python = ">=3.12"
 dependencies = [
     "mcp[cli]>=1.2.0",
-    "fastmcp>=0.4.0",
+    "fastmcp>=3.0.0,<4.0.0",
     "qdrant-client[fastembed]>=1.12.0",
     "voyageai>=0.3.0",
     "python-frontmatter>=1.1.0",

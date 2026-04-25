@@ -1,4 +1,9 @@
-"""Voyage client wrapper: query embeddings + reranking."""
+"""Voyage client wrapper: query embeddings + reranking.
+
+The HTTP client is constructed lazily so the MCP server can boot even when
+`VOYAGE_API_KEY` isn't configured yet — the `/health` route stays alive,
+and only the tools that actually call Voyage will surface the error.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +20,10 @@ from tenacity import (
 log = structlog.get_logger()
 
 
+class VoyageNotConfiguredError(RuntimeError):
+    pass
+
+
 class VoyageClient:
     def __init__(
         self,
@@ -22,13 +31,21 @@ class VoyageClient:
         query_model: str = "voyage-3.5",
         rerank_model: str = "rerank-2.5",
     ) -> None:
-        if not api_key:
-            raise ValueError("VOYAGE_API_KEY is required")
-        import voyageai
-
-        self.client = voyageai.Client(api_key=api_key)
+        self.api_key = api_key
         self.query_model = query_model
         self.rerank_model = rerank_model
+        self._client: Any | None = None
+
+    def _ensure_client(self) -> Any:
+        if not self.api_key:
+            raise VoyageNotConfiguredError(
+                "VOYAGE_API_KEY is required for this tool"
+            )
+        if self._client is None:
+            import voyageai
+
+            self._client = voyageai.Client(api_key=self.api_key)
+        return self._client
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -37,7 +54,7 @@ class VoyageClient:
         reraise=True,
     )
     def embed_query(self, query: str) -> list[float]:
-        result = self.client.embed(
+        result = self._ensure_client().embed(
             texts=[query],
             model=self.query_model,
             input_type="query",
@@ -60,7 +77,7 @@ class VoyageClient:
         """Return [(original_index, score), ...] sorted by score desc."""
         if not documents:
             return []
-        result = self.client.rerank(
+        result = self._ensure_client().rerank(
             query=query,
             documents=documents,
             model=self.rerank_model,

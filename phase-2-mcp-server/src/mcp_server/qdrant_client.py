@@ -28,7 +28,10 @@ class VaultIndex:
         *,
         api_key: str | None = None,
     ) -> None:
-        self.client = QdrantClient(url=url, api_key=api_key)
+        # QdrantClient is constructed eagerly but doesn't actually open a
+        # connection until the first request. That keeps boot fast and lets
+        # the MCP server come up even if Qdrant is briefly unreachable.
+        self.client = QdrantClient(url=url, api_key=api_key, prefer_grpc=False)
         self.collection = collection
 
     # --- Filters --------------------------------------------------------------

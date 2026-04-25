@@ -249,39 +249,90 @@ def register_tools(mcp: FastMCP, ctx: ServerContext, gtasks: GoogleTasksClient |
             return gtasks_tools.resolve_task_list(ctx, project=project)
 
 
+def _log_config_summary(settings: Settings) -> None:
+    """Print which required env vars are set, so misconfigured deployments
+    are obvious in Railway logs even before any request comes in."""
+    log.info(
+        "config_summary",
+        vault_path=str(settings.vault_path),
+        qdrant_url=settings.qdrant_url,
+        qdrant_collection=settings.qdrant_collection,
+        voyage_api_key_set=bool(settings.voyage_api_key),
+        bearer_token_set=bool(settings.bearer_token),
+        gtasks_token_present=settings.gtasks_token_path.exists(),
+        gtasks_key_set=bool(settings.gtasks_token_key),
+        meetgeek_secret_set=bool(settings.meetgeek_webhook_secret),
+        public_domain=settings.public_domain,
+        host=settings.host,
+        port=settings.port,
+    )
+
+
+async def _health(request):
+    from starlette.responses import JSONResponse
+
+    return JSONResponse({"ok": True})
+
+
 def build_app(settings: Settings | None = None):
     settings = settings or get_settings()
     setup_logging(settings.log_level)
-    ctx = build_context(settings)
-    gtasks = _maybe_gtasks(settings)
+    _log_config_summary(settings)
 
     mcp = FastMCP(name="second-brain")
-    register_tools(mcp, ctx, gtasks)
 
-    app = mcp.sse_app()
+    ctx: ServerContext | None = None
+    try:
+        ctx = build_context(settings)
+        gtasks = _maybe_gtasks(settings)
+        register_tools(mcp, ctx, gtasks)
+        log.info("tools_registered")
+    except Exception:
+        # Never crash the HTTP listener. Tools may be partially or fully
+        # unavailable, but /health must keep responding so the orchestrator
+        # doesn't keep restarting the container.
+        log.exception("tool_registration_failed")
 
-    # MeetGeek webhook router (auth handled internally).
-    meetgeek_router = make_meetgeek_router(ctx)
-    app.router.routes.extend(meetgeek_router.routes)
+    # FastMCP >= 3 dropped `sse_app()`; use `http_app(transport="sse")`
+    # to keep the legacy /sse endpoint Claude.ai expects.
+    app = mcp.http_app(transport="sse", path="/sse")
 
-    @app.route("/health")
-    async def health(request) -> Any:
-        from starlette.responses import JSONResponse
+    # /health: register via the modern Starlette API. The decorator form
+    # is gone in newer Starlette versions, which would silently 404 here.
+    app.router.add_route("/health", _health, methods=["GET"], name="health")
 
-        return JSONResponse({"ok": True})
+    # MeetGeek webhook router only if context exists.
+    if ctx is not None:
+        try:
+            meetgeek_router = make_meetgeek_router(ctx)
+            for route in meetgeek_router.routes:
+                app.router.routes.append(route)
+        except Exception:
+            log.exception("meetgeek_router_failed")
 
-    app.add_middleware(
-        BearerAuthMiddleware,
-        token=settings.bearer_token,
-        public_paths=("/health", "/meetgeek/webhook"),
-    )
+    if settings.bearer_token:
+        app.add_middleware(
+            BearerAuthMiddleware,
+            token=settings.bearer_token,
+            public_paths=("/health", "/meetgeek/webhook"),
+        )
+    else:
+        log.warning(
+            "bearer_token_not_set; SSE endpoint is open. Set BEARER_TOKEN."
+        )
+
     return app
 
 
 def main() -> None:
     settings = get_settings()
     app = build_app(settings)
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level=settings.log_level.lower())
+    uvicorn.run(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level.lower(),
+    )
 
 
 if __name__ == "__main__":

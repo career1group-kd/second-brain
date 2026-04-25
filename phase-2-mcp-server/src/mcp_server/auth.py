@@ -26,9 +26,6 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in self.public_paths):
             return await call_next(request)
 
-        if not self.token:
-            return JSONResponse({"error": "server_misconfigured"}, status_code=500)
-
         header = request.headers.get("authorization", "")
         prefix = "Bearer "
         if not header.startswith(prefix):
