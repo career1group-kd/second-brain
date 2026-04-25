@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     meetgeek_webhook_secret: str = ""
     meetgeek_api_token: str = ""
 
+    # When True (default) the container crashes immediately if tool
+    # registration fails, making Railway show the traceback right away.
+    # Set to False only for emergency deploys where /health must stay up
+    # even with a broken tool layer.
+    fail_fast_on_tool_registration: bool = True
+
     @property
     def allowed_emails_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}

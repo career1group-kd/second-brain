@@ -250,6 +250,20 @@ def register_tools(mcp: FastMCP, ctx: ServerContext, gtasks: GoogleTasksClient |
             return gtasks_tools.resolve_task_list(ctx, project=project)
 
 
+def _count_mcp_tools(mcp: FastMCP) -> int | None:
+    """Best-effort count of tools registered on the FastMCP instance."""
+    mgr = getattr(mcp, "_tool_manager", None)
+    if mgr is None:
+        return None
+    for attr in ("tools", "_tools"):
+        tools = getattr(mgr, attr, None)
+        if isinstance(tools, dict):
+            return len(tools)
+        if isinstance(tools, (list, set)):
+            return len(tools)
+    return None
+
+
 def _log_config_summary(settings: Settings) -> None:
     """Print which required env vars are set, so misconfigured deployments
     are obvious in Railway logs even before any request comes in."""
@@ -258,6 +272,7 @@ def _log_config_summary(settings: Settings) -> None:
         vault_path=str(settings.vault_path),
         qdrant_url=settings.qdrant_url,
         qdrant_collection=settings.qdrant_collection,
+        qdrant_api_key_set=bool(settings.qdrant_api_key),
         voyage_api_key_set=bool(settings.voyage_api_key),
         bearer_token_set=bool(settings.bearer_token),
         google_oauth_enabled=settings.google_oauth_enabled,
@@ -268,6 +283,7 @@ def _log_config_summary(settings: Settings) -> None:
         public_domain=settings.public_domain,
         host=settings.host,
         port=settings.port,
+        fail_fast_on_tool_registration=settings.fail_fast_on_tool_registration,
     )
 
 
@@ -305,12 +321,18 @@ def build_app(settings: Settings | None = None):
         ctx = build_context(settings)
         gtasks = _maybe_gtasks(settings)
         register_tools(mcp, ctx, gtasks)
-        log.info("tools_registered")
+        n = _count_mcp_tools(mcp)
+        log.info("tools_registered", count=n if n is not None else "unknown")
     except Exception:
-        # Never crash the HTTP listener. Tools may be partially or fully
-        # unavailable, but /health must keep responding so the orchestrator
-        # doesn't keep restarting the container.
-        log.exception("tool_registration_failed")
+        log.error(
+            "tool_registration_failed",
+            fail_fast=settings.fail_fast_on_tool_registration,
+            exc_info=True,
+        )
+        if settings.fail_fast_on_tool_registration:
+            # Crash immediately so Railway shows the traceback and restarts
+            # with a visible error instead of silently serving 0 tools.
+            raise
 
     # FastMCP >= 3 dropped `sse_app()`; use `http_app(transport="sse")`
     # to keep the legacy /sse endpoint Claude.ai expects.
