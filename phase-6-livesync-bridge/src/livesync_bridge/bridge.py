@@ -252,12 +252,18 @@ class LiveSyncBridge:
 
         doc_id = encoding.path_to_doc_id(rel, prefix=self.settings.couchdb_file_prefix)
         existing = await self.couch.get_doc(doc_id)
-        body = encoding.render_plain(content, path=rel)
-        body["_id"] = doc_id
+        leaves, head = encoding.render_plain(content, path=rel)
+        head["_id"] = doc_id
         if existing and "_rev" in existing:
-            body["_rev"] = existing["_rev"]
+            head["_rev"] = existing["_rev"]
 
-        await self.couch.put_doc(body)
+        # Write leaves before the head so the head never references a
+        # missing chunk. Leaves are content-addressed: existing IDs
+        # already hold identical content, so we skip those writes.
+        for leaf in leaves:
+            if await self.couch.get_doc(leaf["_id"]) is None:
+                await self.couch.put_doc(leaf)
+        await self.couch.put_doc(head)
         self.fs_to_db.remember(rel, h)
         log.info("livesync_couch_write", path=rel, bytes=len(content))
 

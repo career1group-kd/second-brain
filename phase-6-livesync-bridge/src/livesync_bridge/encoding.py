@@ -1,22 +1,21 @@
 """Encode/decode helpers for obsidian-livesync's CouchDB document format.
 
-obsidian-livesync stores notes either:
+Modern obsidian-livesync (>= 0.23) stores notes as a head document with
+`type: "plain"` and a `children: ["h:..."]` array referencing one or more
+`type: "leaf"` chunk documents that hold the actual `data`. Binary blobs
+use the same shape but with `datatype: "newnote_b"` (or `type: "plain_b"`)
+on the head; their leaf data is base64-encoded.
 
-1. As a single document with `data: <utf-8 string>` (`type: plain` or `newnote`
-   with no chunking).
-2. As a "head" document referencing chunk children (`type: newnote`,
-   `children: [...]`), where each child is a separate document of
-   `type: leaf` carrying a slice of the content in `data`.
-3. For binary files (`type: plain` with the binary bit set), `data` is
-   base64-encoded.
-
-Different plugin versions name fields slightly differently. The helpers below
-are tolerant: they accept the union of seen shapes and decode best-effort.
+Older plugin versions used `type: "newnote"` with prefixed file IDs
+(`f:`, `p:`, `ps:`). Reads are tolerant of the union of all seen shapes;
+writes default to the modern shape (single content-addressed leaf per file —
+the plugin will rechunk on the next edit from a device).
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import re
 import time
 from typing import Any, Iterable
@@ -147,28 +146,53 @@ def reassemble(
     return b""
 
 
-def render_plain(content: bytes, *, path: str | None = None) -> dict[str, Any]:
-    """Build a single-doc payload (no chunking) for a markdown note.
+def _content_chunk_id(content: bytes) -> str:
+    """Stable content-addressed chunk ID (`h:<12 base32 chars>`).
 
-    The Obsidian plugin accepts this shape and will rewrite into chunked
-    form on the next edit from a device. `type: "newnote"` is the markdown
-    type — `"plain"` is reserved for binary blobs in modern plugin versions
-    and routes the doc through the base64 decode path, which fails for
-    text content with `Failed to gather content` in ReplicateResultProcessor.
-    `ctime`/`mtime` must be ms-since-epoch ints; `null` confuses the plugin.
+    Same content → same ID, so re-writing an unchanged file does not
+    create duplicate leaf docs. The format mirrors what obsidian-livesync
+    produces (lowercase alphanumeric after `h:`).
+    """
+    digest = hashlib.sha256(content).digest()
+    s = base64.b32encode(digest).decode("ascii").rstrip("=").lower()
+    return f"h:{s[:12]}"
+
+
+def render_plain(
+    content: bytes, *, path: str | None = None
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Build (leaf_docs, head_doc) for a markdown note.
+
+    The head doc has `type: "plain"` and references its content via
+    `children: ["h:..."]` — matching the shape obsidian-livesync writes
+    itself. Inline `data` on the head, or `type: "newnote"`, makes modern
+    plugin versions throw `Failed to gather content` in
+    `ReplicateResultProcessor` during replication.
+
+    The caller MUST write the leaf docs before the head doc so the head
+    never references a missing chunk. `ctime`/`mtime` are ms-since-epoch
+    ints; `null` confuses the plugin.
     """
     text = content.decode("utf-8", errors="replace")
+    chunk_id = _content_chunk_id(content)
     now_ms = int(time.time() * 1000)
-    body: dict[str, Any] = {
-        "type": "newnote",
+
+    leaf: dict[str, Any] = {
+        "_id": chunk_id,
+        "type": "leaf",
         "data": text,
+    }
+    head: dict[str, Any] = {
+        "type": "plain",
+        "children": [chunk_id],
         "size": len(content),
         "ctime": now_ms,
         "mtime": now_ms,
+        "eden": {},
     }
     if path is not None:
-        body["path"] = path
-    return body
+        head["path"] = path
+    return [leaf], head
 
 
 def is_markdown_path(path: str) -> bool:
