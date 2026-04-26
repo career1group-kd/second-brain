@@ -1,8 +1,8 @@
 """FastMCP server entrypoint.
 
 Registers all tool groups (vault read/write, people, Google Tasks) on a
-FastMCP instance, mounts it under /sse, adds Bearer auth middleware, and
-attaches the MeetGeek webhook router under /meetgeek/webhook.
+FastMCP instance, mounts it under /mcp (Streamable HTTP), adds Bearer auth
+middleware, and attaches the MeetGeek webhook router under /meetgeek/webhook.
 """
 
 from __future__ import annotations
@@ -372,9 +372,10 @@ def build_app(settings: Settings | None = None):
     _log_registered_tools(mcp)
     mcp.add_middleware(_MCPDebugMiddleware())
 
-    # FastMCP >= 3 dropped `sse_app()`; use `http_app(transport="sse")`
-    # to keep the legacy /sse endpoint Claude.ai expects.
-    app = mcp.http_app(transport="sse", path="/sse")
+    # Streamable HTTP is the current MCP transport standard. SSE is deprecated
+    # and unreliable in the Claude mobile apps; /mcp keeps the server working
+    # there as well as in claude.ai.
+    app = mcp.http_app(transport="streamable-http", path="/mcp")
 
     # /health: register via the modern Starlette API. The decorator form
     # is gone in newer Starlette versions, which would silently 404 here.
@@ -405,7 +406,7 @@ def build_app(settings: Settings | None = None):
     else:
         log.warning(
             "auth_mode_open; no auth configured. Set GOOGLE_OAUTH_CLIENT_ID "
-            "or BEARER_TOKEN to gate /sse."
+            "or BEARER_TOKEN to gate /mcp."
         )
 
     return app

@@ -2,8 +2,8 @@
 
 The single connector between [Claude.ai](https://claude.ai) and the Second
 Brain. Exposes vault read + write tools, person tools, Google Tasks tools,
-and accepts MeetGeek webhooks. Talks SSE on `/sse` with Bearer auth, fronted
-by Caddy for auto-TLS.
+and accepts MeetGeek webhooks. Talks Streamable HTTP on `/mcp` with Bearer
+auth, fronted by Caddy for auto-TLS.
 
 ## Phase coverage
 
@@ -35,7 +35,7 @@ by Caddy for auto-TLS.
 **HTTP routes**:
 - `POST /meetgeek/webhook` (Phase 5) — MeetGeek delivery.
 - `GET /health` — liveness probe.
-- `/sse` — MCP SSE transport for Claude.ai.
+- `/mcp` — MCP Streamable HTTP transport for Claude.ai and the Claude mobile apps.
 
 ## Setup
 
@@ -84,7 +84,7 @@ Caddy issues a Let's Encrypt cert and reverse-proxies `mcp_server:8000`.
 
 Settings → Connectors → Add custom connector:
 
-- URL: `https://<PUBLIC_DOMAIN>/sse`
+- URL: `https://<PUBLIC_DOMAIN>/mcp`
 - Auth: Bearer
 - Token: value of `BEARER_TOKEN`
 

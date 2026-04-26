@@ -196,7 +196,7 @@ them in Qdrant.
 ## Step 7 — Register the connector in Claude.ai
 
 1. Claude.ai → Settings → Connectors → **Add custom connector**.
-2. URL: `https://<your-second-brain-public-url>/sse`
+2. URL: `https://<your-second-brain-public-url>/mcp`
 3. Auth: **Bearer**, token = your `BEARER_TOKEN`.
 4. Save. The 16+ tools should appear in the conversation tool picker.
 
@@ -218,12 +218,12 @@ curl https://<your-app>/health
 # {"ok": true}
 
 # Auth must reject unknown bearers
-curl -i https://<your-app>/sse
+curl -i https://<your-app>/mcp
 # HTTP/2 401
 
 # Bearer must succeed
-curl -i -H "Authorization: Bearer $BEARER_TOKEN" https://<your-app>/sse
-# HTTP/2 200 (then SSE event-stream)
+curl -i -H "Authorization: Bearer $BEARER_TOKEN" https://<your-app>/mcp
+# HTTP/2 200 (Streamable HTTP)
 ```
 
 In Claude.ai, ask: *"Welche aktiven Projekte habe ich?"* — the

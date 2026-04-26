@@ -42,7 +42,7 @@ def test_health_route_bypasses_bearer_auth(tmp_path: Path) -> None:
 def test_protected_paths_reject_without_bearer(tmp_path: Path) -> None:
     app = build_app(_settings(tmp_path, bearer_token="secret-xyz"))
     with TestClient(app) as client:
-        resp = client.get("/sse")
+        resp = client.get("/mcp")
         assert resp.status_code == 401
 
 
