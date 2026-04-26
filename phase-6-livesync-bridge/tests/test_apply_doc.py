@@ -91,13 +91,37 @@ async def test_push_path_creates_doc(bridge: LiveSyncBridge) -> None:
     target.parent.mkdir(parents=True)
     target.write_text("# Anna\n")
     await bridge.push_path("70_People/Anna.md")
-    bridge.couch.put_doc.assert_awaited_once()
-    body = bridge.couch.put_doc.await_args.args[0]
-    # Modern obsidian-livesync expects the lowercased path as ID, with the
-    # original-case path in a separate `path` field.
-    assert body["_id"] == "70_people/anna.md"
-    assert body["path"] == "70_People/Anna.md"
-    assert body["data"] == "# Anna\n"
+    # push_path writes one leaf chunk doc, then the head doc.
+    assert bridge.couch.put_doc.await_count == 2
+    leaf, head = (call.args[0] for call in bridge.couch.put_doc.await_args_list)
+    assert leaf["type"] == "leaf"
+    assert leaf["_id"].startswith("h:")
+    assert leaf["data"] == "# Anna\n"
+    # Modern obsidian-livesync expects the lowercased path as the head ID,
+    # `type: "plain"`, and the content referenced via `children`.
+    assert head["_id"] == "70_people/anna.md"
+    assert head["path"] == "70_People/Anna.md"
+    assert head["type"] == "plain"
+    assert head["children"] == [leaf["_id"]]
+    assert "data" not in head
+
+
+async def test_push_path_skips_existing_leaf(bridge: LiveSyncBridge) -> None:
+    # Content-addressed leaves should not be re-written if they already
+    # exist in CouchDB — only the head doc gets a new revision.
+    target = bridge.settings.vault_path / "a.md"
+    target.write_text("hello")
+
+    async def fake_get(doc_id: str) -> dict | None:
+        if doc_id.startswith("h:"):
+            return {"_id": doc_id, "_rev": "1-leaf", "type": "leaf", "data": "hello"}
+        return None
+
+    bridge.couch.get_doc = AsyncMock(side_effect=fake_get)
+    await bridge.push_path("a.md")
+    assert bridge.couch.put_doc.await_count == 1
+    head = bridge.couch.put_doc.await_args.args[0]
+    assert head["type"] == "plain"
 
 
 async def test_push_path_with_legacy_prefix(tmp_path: Path) -> None:
@@ -118,19 +142,22 @@ async def test_push_path_with_legacy_prefix(tmp_path: Path) -> None:
     target.parent.mkdir(parents=True)
     target.write_text("# Anna\n")
     await b.push_path("70_People/Anna.md")
-    body = b.couch.put_doc.await_args.args[0]
-    assert body["_id"] == "f:70_People/Anna.md"
+    head = b.couch.put_doc.await_args_list[-1].args[0]
+    assert head["_id"] == "f:70_People/Anna.md"
 
 
 async def test_push_path_includes_existing_rev(bridge: LiveSyncBridge) -> None:
     bridge.couch.get_doc = AsyncMock(
-        return_value={"_id": "a.md", "_rev": "3-abc", "data": "old"}
+        return_value={"_id": "a.md", "_rev": "3-abc", "type": "plain"}
     )
     target = bridge.settings.vault_path / "a.md"
     target.write_text("new")
     await bridge.push_path("a.md")
-    body = bridge.couch.put_doc.await_args.args[0]
-    assert body["_rev"] == "3-abc"
+    # The rev belongs on the head doc (the file-id doc), which is the
+    # last put_doc call.
+    head = bridge.couch.put_doc.await_args_list[-1].args[0]
+    assert head["_id"] == "a.md"
+    assert head["_rev"] == "3-abc"
 
 
 async def test_apply_then_push_does_not_echo(bridge: LiveSyncBridge) -> None:

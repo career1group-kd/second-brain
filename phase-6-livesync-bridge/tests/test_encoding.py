@@ -101,28 +101,51 @@ def test_reassemble_binary_decodes_base64() -> None:
     assert out == raw
 
 
-def test_render_plain_round_trips() -> None:
-    payload = encoding.render_plain(b"# Title\n\nbody")
-    # Markdown writes must use `newnote`; `plain` routes the plugin into
-    # the binary base64 path and fails to gather content.
-    assert payload["type"] == "newnote"
-    assert payload["data"] == "# Title\n\nbody"
-    assert payload["size"] == len(b"# Title\n\nbody")
-    assert "path" not in payload
-    assert isinstance(payload["mtime"], int) and payload["mtime"] > 0
-    assert isinstance(payload["ctime"], int) and payload["ctime"] > 0
+def test_render_plain_emits_chunked_head_and_leaf() -> None:
+    # Modern obsidian-livesync expects markdown as `type: "plain"` with
+    # a `children: ["h:..."]` chunk reference; the head must NOT carry
+    # inline `data`. Inline-data heads (or `type: "newnote"`) cause
+    # `Failed to gather content` in the plugin's ReplicateResultProcessor.
+    leaves, head = encoding.render_plain(b"# Title\n\nbody")
+    assert head["type"] == "plain"
+    assert "data" not in head
+    assert isinstance(head["children"], list) and len(head["children"]) == 1
+    assert head["size"] == len(b"# Title\n\nbody")
+    assert head["eden"] == {}
+    assert "path" not in head
+    assert isinstance(head["mtime"], int) and head["mtime"] > 0
+    assert isinstance(head["ctime"], int) and head["ctime"] > 0
+
+    assert len(leaves) == 1
+    leaf = leaves[0]
+    assert leaf["_id"] == head["children"][0]
+    assert leaf["_id"].startswith("h:")
+    assert leaf["type"] == "leaf"
+    assert leaf["data"] == "# Title\n\nbody"
 
 
 def test_render_plain_includes_path_when_given() -> None:
-    payload = encoding.render_plain(b"x", path="Notes/Foo.md")
-    assert payload["path"] == "Notes/Foo.md"
+    _, head = encoding.render_plain(b"x", path="Notes/Foo.md")
+    assert head["path"] == "Notes/Foo.md"
+
+
+def test_render_plain_chunk_id_is_content_addressed() -> None:
+    # Same content → same chunk ID, so re-writing an unchanged file
+    # does not produce a duplicate leaf doc.
+    a_leaves, _ = encoding.render_plain(b"hello")
+    b_leaves, _ = encoding.render_plain(b"hello")
+    c_leaves, _ = encoding.render_plain(b"world")
+    assert a_leaves[0]["_id"] == b_leaves[0]["_id"]
+    assert a_leaves[0]["_id"] != c_leaves[0]["_id"]
 
 
 def test_render_plain_round_trips_via_reassemble() -> None:
-    # Sanity: what render_plain emits must decode back to the same bytes.
+    # Sanity: what render_plain emits must decode back to the same bytes
+    # when the head is reassembled with its leaves as the chunk source.
     original = b"# Title\n\nbody with umlauts: \xc3\xa4\xc3\xb6"
-    payload = encoding.render_plain(original)
-    out = encoding.reassemble(payload, chunk_resolver=lambda _: None)
+    leaves, head = encoding.render_plain(original)
+    by_id = {leaf["_id"]: leaf for leaf in leaves}
+    out = encoding.reassemble(head, chunk_resolver=lambda cid: by_id.get(cid))
     assert out == original
 
 

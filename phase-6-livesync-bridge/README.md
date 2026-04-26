@@ -82,9 +82,12 @@ Coverage:
   the bridge sees ciphertext and writes ciphertext to disk — useless to
   the watcher. Leave E2EE off, or extend `encoding.py` with a decryptor.
 - **Chunk write-back format**: when the bridge pushes a file *to*
-  CouchDB, it writes a single non-chunked doc (`type: plain`, `data:
-  <utf-8>`). The plugin accepts this on read; on the next device-side
-  edit, it may rewrite it into chunked form, which is fine.
+  CouchDB, it writes the same shape obsidian-livesync writes itself —
+  a head doc (`type: "plain"`, `children: ["h:..."]`) plus a single
+  content-addressed leaf doc (`type: "leaf"`, `data: <utf-8>`). The
+  plugin may rechunk on the next device-side edit, which is fine.
+  Inline-`data` heads or `type: "newnote"` cause `Failed to gather
+  content` toasts in `ReplicateResultProcessor` — don't go there.
 - **Conflict resolution**: if two devices edit the same bytes
   simultaneously, CouchDB stores both revisions and the bridge applies
   the winning revision per the plugin's conflict policy. We don't
