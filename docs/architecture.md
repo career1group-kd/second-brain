@@ -125,7 +125,7 @@ FastAPI-Service neben dem MCP Server. Nimmt MeetGeek-Webhooks entgegen, rendert 
 
 ### 2.7 Claude.ai Integration
 
-Ein Custom Connector → `https://mcp.<domain>/sse`, Bearer Auth.
+Ein Custom Connector → `https://mcp.<domain>/mcp` (Streamable HTTP), Bearer Auth.
 
 ---
 
