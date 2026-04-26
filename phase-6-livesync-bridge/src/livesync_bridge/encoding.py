@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import re
+import time
 from typing import Any, Iterable
 
 # Older obsidian-livesync versions stored file docs with one of these
@@ -149,17 +150,21 @@ def reassemble(
 def render_plain(content: bytes, *, path: str | None = None) -> dict[str, Any]:
     """Build a single-doc payload (no chunking) for a markdown note.
 
-    The Obsidian plugin will accept this shape for sync; on the next edit
-    from a device, the plugin may rewrite into chunked form. Modern plugin
-    versions expect a `path` field carrying the original-case vault path.
+    The Obsidian plugin accepts this shape and will rewrite into chunked
+    form on the next edit from a device. `type: "newnote"` is the markdown
+    type — `"plain"` is reserved for binary blobs in modern plugin versions
+    and routes the doc through the base64 decode path, which fails for
+    text content with `Failed to gather content` in ReplicateResultProcessor.
+    `ctime`/`mtime` must be ms-since-epoch ints; `null` confuses the plugin.
     """
     text = content.decode("utf-8", errors="replace")
+    now_ms = int(time.time() * 1000)
     body: dict[str, Any] = {
-        "type": "plain",
+        "type": "newnote",
         "data": text,
         "size": len(content),
-        "ctime": None,
-        "mtime": None,
+        "ctime": now_ms,
+        "mtime": now_ms,
     }
     if path is not None:
         body["path"] = path

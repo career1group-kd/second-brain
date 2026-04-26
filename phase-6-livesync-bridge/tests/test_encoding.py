@@ -103,15 +103,27 @@ def test_reassemble_binary_decodes_base64() -> None:
 
 def test_render_plain_round_trips() -> None:
     payload = encoding.render_plain(b"# Title\n\nbody")
-    assert payload["type"] == "plain"
+    # Markdown writes must use `newnote`; `plain` routes the plugin into
+    # the binary base64 path and fails to gather content.
+    assert payload["type"] == "newnote"
     assert payload["data"] == "# Title\n\nbody"
     assert payload["size"] == len(b"# Title\n\nbody")
     assert "path" not in payload
+    assert isinstance(payload["mtime"], int) and payload["mtime"] > 0
+    assert isinstance(payload["ctime"], int) and payload["ctime"] > 0
 
 
 def test_render_plain_includes_path_when_given() -> None:
     payload = encoding.render_plain(b"x", path="Notes/Foo.md")
     assert payload["path"] == "Notes/Foo.md"
+
+
+def test_render_plain_round_trips_via_reassemble() -> None:
+    # Sanity: what render_plain emits must decode back to the same bytes.
+    original = b"# Title\n\nbody with umlauts: \xc3\xa4\xc3\xb6"
+    payload = encoding.render_plain(original)
+    out = encoding.reassemble(payload, chunk_resolver=lambda _: None)
+    assert out == original
 
 
 def test_is_markdown_path() -> None:
