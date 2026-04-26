@@ -7,12 +7,14 @@ attaches the MeetGeek webhook router under /meetgeek/webhook.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Any
 
 import structlog
 import uvicorn
 from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware
 
 from .auth import BearerAuthMiddleware
 from .config import Settings, get_settings
@@ -28,6 +30,57 @@ from .tools._common import ServerContext
 from .voyage import VoyageClient
 
 log = structlog.get_logger()
+
+
+class _MCPDebugMiddleware(Middleware):
+    """Logs every list_tools / call_tool request and its result.
+
+    Temporary diagnostics for debugging why Claude.ai sometimes shows no
+    tools even though the server processes ListToolsRequest. Remove once
+    the empty-tools issue is understood.
+    """
+
+    async def on_list_tools(self, context, call_next):
+        result = await call_next(context)
+        try:
+            names = [getattr(t, "name", "?") for t in result]
+        except Exception:
+            names = ["<unrepr>"]
+        log.info(
+            "mcp_list_tools_response",
+            count=len(names),
+            names=names,
+            source=getattr(context, "source", None),
+        )
+        return result
+
+    async def on_call_tool(self, context, call_next):
+        tool_name = getattr(getattr(context, "message", None), "name", None)
+        log.info("mcp_call_tool_request", tool=tool_name)
+        try:
+            result = await call_next(context)
+        except Exception:
+            log.exception("mcp_call_tool_failed", tool=tool_name)
+            raise
+        log.info("mcp_call_tool_ok", tool=tool_name)
+        return result
+
+
+def _log_registered_tools(mcp: FastMCP) -> None:
+    """Synchronously snapshot the FastMCP tool registry after startup.
+
+    This proves whether @mcp.tool() decorators actually attached tools
+    before any client request. If `tools_registered_snapshot` shows
+    count=0, the bug is server-side; if count>0 but Claude.ai sees none,
+    the bug is in transport / auth / client.
+    """
+    try:
+        tools = asyncio.run(mcp.list_tools())
+    except Exception:
+        log.exception("tools_snapshot_failed")
+        return
+    names = sorted(getattr(t, "name", "?") for t in tools)
+    log.info("tools_registered_snapshot", count=len(names), names=names)
 
 
 def build_context(settings: Settings | None = None) -> ServerContext:
@@ -311,6 +364,13 @@ def build_app(settings: Settings | None = None):
         # unavailable, but /health must keep responding so the orchestrator
         # doesn't keep restarting the container.
         log.exception("tool_registration_failed")
+
+    # Snapshot whatever ended up on the registry, even if registration
+    # partially failed. Pairs with the mcp_list_tools_response logs from
+    # the debug middleware to pinpoint where a "no tools" symptom comes
+    # from.
+    _log_registered_tools(mcp)
+    mcp.add_middleware(_MCPDebugMiddleware())
 
     # FastMCP >= 3 dropped `sse_app()`; use `http_app(transport="sse")`
     # to keep the legacy /sse endpoint Claude.ai expects.
