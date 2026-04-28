@@ -330,6 +330,39 @@ async def _health(request):
     return JSONResponse({"ok": True})
 
 
+# Inline brain favicon. Claude.ai's connector UI fetches /favicon.ico from the
+# server's public domain; without this, Railway's edge serves its own default
+# and the connector shows a Railway logo next to "second-brain".
+_BRAIN_FAVICON_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<rect width="24" height="24" rx="5" fill="#1e1b4b"/>'
+    b'<g fill="none" stroke="#c4b5fd" stroke-width="1.6" '
+    b'stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 '
+    b'4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>'
+    b'<path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 '
+    b'4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>'
+    b'<path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>'
+    b'<path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>'
+    b'<path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>'
+    b'<path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>'
+    b'<path d="M19.938 10.5a4 4 0 0 1 .585.396"/>'
+    b'<path d="M6 18a4 4 0 0 1-1.967-.516"/>'
+    b'<path d="M19.967 17.484A4 4 0 0 1 18 18"/>'
+    b'</g></svg>'
+)
+
+
+async def _favicon(request):
+    from starlette.responses import Response
+
+    return Response(
+        content=_BRAIN_FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 def build_app(settings: Settings | None = None):
     settings = settings or get_settings()
     setup_logging(settings.log_level)
@@ -381,6 +414,11 @@ def build_app(settings: Settings | None = None):
     # is gone in newer Starlette versions, which would silently 404 here.
     app.router.add_route("/health", _health, methods=["GET"], name="health")
 
+    # Favicon: served as SVG from both /favicon.ico and /favicon.svg so the
+    # Claude connector UI shows a brain instead of Railway's default logo.
+    app.router.add_route("/favicon.ico", _favicon, methods=["GET"], name="favicon_ico")
+    app.router.add_route("/favicon.svg", _favicon, methods=["GET"], name="favicon_svg")
+
     # MeetGeek webhook router only if context exists.
     if ctx is not None:
         try:
@@ -401,7 +439,12 @@ def build_app(settings: Settings | None = None):
         app.add_middleware(
             BearerAuthMiddleware,
             token=settings.bearer_token,
-            public_paths=("/health", "/meetgeek/webhook"),
+            public_paths=(
+                "/health",
+                "/meetgeek/webhook",
+                "/favicon.ico",
+                "/favicon.svg",
+            ),
         )
     else:
         log.warning(

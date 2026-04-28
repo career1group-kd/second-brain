@@ -53,6 +53,26 @@ def test_health_route_registered_in_router(tmp_path: Path) -> None:
     assert "/health" in paths
 
 
+def test_favicon_routes_serve_brain_svg(tmp_path: Path) -> None:
+    """Both /favicon.ico and /favicon.svg must return the inline brain SVG."""
+    app = build_app(_settings(tmp_path))
+    with TestClient(app) as client:
+        for path in ("/favicon.ico", "/favicon.svg"):
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            assert resp.headers["content-type"].startswith("image/svg+xml"), path
+            assert resp.content.startswith(b"<svg"), path
+
+
+def test_favicon_bypasses_bearer_auth(tmp_path: Path) -> None:
+    """Connector clients fetch /favicon.ico without auth — must not 401."""
+    app = build_app(_settings(tmp_path, bearer_token="secret-xyz"))
+    with TestClient(app) as client:
+        resp = client.get("/favicon.ico")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/svg+xml")
+
+
 def test_oauth_mode_exposes_authorization_endpoints(tmp_path: Path) -> None:
     """When Google OAuth is configured, /authorize + /token must be wired."""
     app = build_app(
