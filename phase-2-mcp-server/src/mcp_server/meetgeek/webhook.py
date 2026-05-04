@@ -14,6 +14,7 @@ from ..atomic import atomic_write
 from ..tools._common import ServerContext
 from ..tools.vault_read import list_active_projects
 from ..tools.vault_write import append_to_person, update_person_meta
+from .api import MeetGeekError, fetch_meeting_bundle, to_meeting_payload
 from .matcher import match_attendees
 from .renderer import render_meeting
 from .types import MeetingPayload
@@ -77,18 +78,37 @@ def make_router(ctx: ServerContext) -> APIRouter:
 
 
 def _process(ctx: ServerContext, settings, payload: dict) -> dict[str, Any]:
+    meeting_id = payload.get("meeting_id") if isinstance(payload, dict) else None
+    if not meeting_id:
+        raise HTTPException(status_code=400, detail="meeting_id required")
+
+    # MeetGeek delivers a notification only — fetch the actual meeting via API.
     try:
-        meeting = MeetingPayload(**payload)
+        bundle = fetch_meeting_bundle(settings.meetgeek_api_token, meeting_id)
+    except MeetGeekError as e:
+        log.warning("meetgeek_fetch_failed", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
+
+    mapped = to_meeting_payload(bundle)
+    log.info(
+        "meetgeek_fetched",
+        meeting_id=meeting_id,
+        title=mapped.get("title"),
+        attendees=len(mapped.get("attendees") or []),
+        has_transcript=bool(mapped.get("transcript")),
+        has_summary=bool(mapped.get("summary")),
+    )
+
+    try:
+        meeting = MeetingPayload(**mapped)
     except Exception as e:
-        log.warning(
-            "meetgeek_invalid_payload",
-            error=str(e),
-            payload_keys=list(payload.keys()) if isinstance(payload, dict) else None,
-        )
+        log.warning("meetgeek_invalid_payload", error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
     if not meeting.attendees:
-        raise HTTPException(status_code=400, detail="attendees required")
+        # Notifications without attendees still get a stub note — better than
+        # losing the trigger entirely.
+        log.info("meetgeek_no_attendees", meeting_id=meeting_id)
 
     matches = match_attendees(settings.vault_path, meeting.attendees)
 
