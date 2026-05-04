@@ -47,7 +47,6 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|
 | ✓ | `VAULT_PATH`, `BEARER_TOKEN`, `VOYAGE_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION` |
 | Phase 4 | `GOOGLE_CLIENT_SECRETS_PATH`, `GTASKS_TOKEN_KEY` (Fernet) |
-| Phase 5 | `MEETGEEK_WEBHOOK_SECRET` |
 
 Generate a Fernet key for Google Tasks:
 

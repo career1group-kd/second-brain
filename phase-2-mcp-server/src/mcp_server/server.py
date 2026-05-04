@@ -317,7 +317,6 @@ def _log_config_summary(settings: Settings) -> None:
         allowed_emails_count=len(settings.allowed_emails_set),
         gtasks_token_present=settings.gtasks_token_path.exists(),
         gtasks_key_set=bool(settings.gtasks_token_key),
-        meetgeek_secret_set=bool(settings.meetgeek_webhook_secret),
         public_domain=settings.public_domain,
         host=settings.host,
         port=settings.port,

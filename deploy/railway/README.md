@@ -58,7 +58,6 @@ Generate the random secrets:
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"          # BEARER_TOKEN
-python3 -c "import secrets; print(secrets.token_urlsafe(24))"          # MEETGEEK_WEBHOOK_SECRET
 python3 -c "import secrets; print(secrets.token_urlsafe(20))"          # COUCHDB_PASSWORD
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # GTASKS_TOKEN_KEY
 ```
@@ -204,9 +203,12 @@ them in Qdrant.
 
 1. MeetGeek → Settings → Integrations → Webhooks → **Add Webhook**.
 2. URL: `https://<your-second-brain-public-url>/meetgeek/webhook`
-3. Auth header: `Authorization: Bearer <MEETGEEK_WEBHOOK_SECRET>`
-4. Event: meeting completed.
-5. Test delivery → check Railway logs for `meetgeek_processed`.
+3. Event: meeting completed.
+4. Test delivery → check Railway logs for `meetgeek_processed`.
+
+The endpoint is unauthenticated — the URL itself is the only secret.
+Treat it accordingly (don't share, rotate by redeploying with a different
+public domain if it ever leaks).
 
 ## Verifying
 

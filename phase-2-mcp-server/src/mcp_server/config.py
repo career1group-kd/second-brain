@@ -51,7 +51,6 @@ class Settings(BaseSettings):
     gtasks_token_key: str = ""
 
     # Phase 5 — MeetGeek
-    meetgeek_webhook_secret: str = ""
     meetgeek_api_token: str = ""
 
     @property

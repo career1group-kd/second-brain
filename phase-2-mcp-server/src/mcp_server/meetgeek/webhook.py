@@ -8,12 +8,10 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from .. import frontmatter_io, vault
 from ..atomic import atomic_write
-from ..auth import constant_time_equals
-from ..config import Settings, get_settings
 from ..tools._common import ServerContext
 from ..tools.vault_read import list_active_projects
 from ..tools.vault_write import append_to_person, update_person_meta
@@ -24,15 +22,6 @@ from .types import MeetingPayload
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/meetgeek", tags=["meetgeek"])
-
-
-def _verify_bearer(secret: str, header: str | None) -> None:
-    if not secret:
-        raise HTTPException(status_code=500, detail="server misconfigured")
-    if not header or not header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="unauthorized")
-    if not constant_time_equals(header[len("Bearer ") :], secret):
-        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 def _existing_meeting_path(vault_root: Path, meetgeek_id: str) -> str | None:
@@ -69,12 +58,7 @@ def make_router(ctx: ServerContext) -> APIRouter:
     settings = ctx.settings
 
     @router.post("/webhook")
-    async def webhook(
-        payload: dict,
-        authorization: str | None = Header(default=None),
-    ) -> dict[str, Any]:
-        _verify_bearer(settings.meetgeek_webhook_secret, authorization)
-
+    async def webhook(payload: dict) -> dict[str, Any]:
         try:
             meeting = MeetingPayload(**payload)
         except Exception as e:
