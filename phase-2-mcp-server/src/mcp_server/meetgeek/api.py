@@ -12,11 +12,29 @@ Endpoints used (all GET, Bearer auth):
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
 import httpx
 import structlog
+
+# Speaker labels that aren't real attendees: MeetGeek auto-labels the
+# recording user as "Ich"/"Me"/"I", and falls back to "Speaker N" or
+# "Unknown" when it can't identify a voice.
+_PLACEHOLDER_SPEAKERS = {"ich", "me", "i", "unknown", "speaker"}
+_SPEAKER_N_RE = re.compile(r"^speaker\s*\d+$", re.IGNORECASE)
+
+
+def _is_real_speaker(name: str) -> bool:
+    n = (name or "").strip()
+    if not n:
+        return False
+    if n.lower() in _PLACEHOLDER_SPEAKERS:
+        return False
+    if _SPEAKER_N_RE.match(n):
+        return False
+    return True
 
 log = structlog.get_logger()
 
@@ -157,18 +175,32 @@ def to_meeting_payload(bundle: dict[str, Any]) -> dict[str, Any]:
 
     # Transcript endpoint: { sentences: [{speaker, timestamp, transcript}] }.
     transcript_lines: list[dict[str, Any]] = []
+    transcript_speakers: list[str] = []
     transcript_obj = bundle.get("transcript")
     if isinstance(transcript_obj, dict):
         for s in transcript_obj.get("sentences") or []:
             if not isinstance(s, dict):
                 continue
+            speaker = s.get("speaker") or "Unknown"
             transcript_lines.append(
                 {
-                    "speaker": s.get("speaker") or "Unknown",
+                    "speaker": speaker,
                     "timestamp": s.get("timestamp"),
                     "text": s.get("transcript") or "",
                 }
             )
+            if _is_real_speaker(speaker) and speaker not in transcript_speakers:
+                transcript_speakers.append(speaker)
+
+    # Add transcript speakers as attendees (dedup against any name we
+    # already added). MeetGeek's Chrome plugin doesn't fill
+    # participant_emails, so this is the only way to populate attendees.
+    seen_names = {a["name"].lower() for a in attendees}
+    for name in transcript_speakers:
+        if name.lower() in seen_names:
+            continue
+        attendees.append({"name": name, "email": None})
+        seen_names.add(name.lower())
 
     template = m.get("template")
     meeting_type = (
