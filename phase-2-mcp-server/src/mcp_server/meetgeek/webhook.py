@@ -1,13 +1,20 @@
-"""FastAPI router for MeetGeek webhook delivery."""
+"""Starlette handler for MeetGeek webhook delivery.
+
+The webhook is registered directly on the Starlette app (no FastAPI
+APIRouter), because the MCP server's top-level app is Starlette and
+FastAPI routes assume a middleware that's only set up by FastAPI itself.
+"""
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from .. import frontmatter_io, vault
 from ..atomic import atomic_write
@@ -20,8 +27,6 @@ from .renderer import render_meeting
 from .types import MeetingPayload
 
 log = structlog.get_logger()
-
-router = APIRouter(prefix="/meetgeek", tags=["meetgeek"])
 
 
 def _existing_meeting_path(vault_root: Path, meetgeek_id: str) -> str | None:
@@ -54,40 +59,54 @@ def _infer_project(ctx: ServerContext, title: str) -> str | None:
     return None
 
 
-def make_router(ctx: ServerContext) -> APIRouter:
+def make_handler(ctx: ServerContext) -> Callable:
     settings = ctx.settings
 
-    @router.post("/webhook")
-    async def webhook(payload: dict) -> dict[str, Any]:
+    async def webhook(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError as e:
+            log.warning("meetgeek_invalid_json", error=str(e))
+            return JSONResponse({"detail": f"invalid json: {e}"}, status_code=400)
+
         log.info(
             "meetgeek_received",
             keys=sorted(payload.keys()) if isinstance(payload, dict) else None,
             payload_type=type(payload).__name__,
         )
+
         try:
-            return _process(ctx, settings, payload)
-        except HTTPException:
-            raise
+            result = _process(ctx, settings, payload)
+            return JSONResponse(result, status_code=200)
+        except _ClientError as e:
+            return JSONResponse({"detail": e.detail}, status_code=e.status)
         except Exception as e:
             log.exception("meetgeek_unhandled", error=str(e))
-            raise HTTPException(
-                status_code=500, detail=f"{type(e).__name__}: {e}"
+            return JSONResponse(
+                {"detail": f"{type(e).__name__}: {e}"}, status_code=500
             )
 
-    return router
+    return webhook
+
+
+class _ClientError(Exception):
+    """4xx/5xx response that doesn't need a stack trace."""
+
+    def __init__(self, status: int, detail: str) -> None:
+        self.status = status
+        self.detail = detail
 
 
 def _process(ctx: ServerContext, settings, payload: dict) -> dict[str, Any]:
     meeting_id = payload.get("meeting_id") if isinstance(payload, dict) else None
     if not meeting_id:
-        raise HTTPException(status_code=400, detail="meeting_id required")
+        raise _ClientError(400, "meeting_id required")
 
-    # MeetGeek delivers a notification only — fetch the actual meeting via API.
     try:
         bundle = fetch_meeting_bundle(settings.meetgeek_api_token, meeting_id)
     except MeetGeekError as e:
         log.warning("meetgeek_fetch_failed", meeting_id=meeting_id, error=str(e))
-        raise HTTPException(status_code=502, detail=str(e))
+        raise _ClientError(502, str(e))
 
     mapped = to_meeting_payload(bundle)
     log.info(
@@ -103,11 +122,9 @@ def _process(ctx: ServerContext, settings, payload: dict) -> dict[str, Any]:
         meeting = MeetingPayload(**mapped)
     except Exception as e:
         log.warning("meetgeek_invalid_payload", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _ClientError(400, str(e))
 
     if not meeting.attendees:
-        # Notifications without attendees still get a stub note — better than
-        # losing the trigger entirely.
         log.info("meetgeek_no_attendees", meeting_id=meeting_id)
 
     matches = match_attendees(settings.vault_path, meeting.attendees)
@@ -122,7 +139,6 @@ def _process(ctx: ServerContext, settings, payload: dict) -> dict[str, Any]:
         relative_path=existing_rel,
     )
 
-    # Preserve `created` for in-place updates.
     if existing_rel:
         existing_abs = vault.safe_join(settings.vault_path, existing_rel)
         try:

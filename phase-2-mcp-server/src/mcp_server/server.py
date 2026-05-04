@@ -20,7 +20,7 @@ from .auth import BearerAuthMiddleware
 from .config import Settings, get_settings
 from .gtasks_client import GoogleTasksClient
 from .logging_setup import setup_logging
-from .meetgeek.webhook import make_router as make_meetgeek_router
+from .meetgeek.webhook import make_handler as make_meetgeek_handler
 from .oauth import build_oauth_provider
 from .qdrant_client import VaultIndex
 from .rerank_cache import RerankCache
@@ -418,12 +418,18 @@ def build_app(settings: Settings | None = None):
     app.router.add_route("/favicon.ico", _favicon, methods=["GET"], name="favicon_ico")
     app.router.add_route("/favicon.svg", _favicon, methods=["GET"], name="favicon_svg")
 
-    # MeetGeek webhook router only if context exists.
+    # MeetGeek webhook only if context exists. Registered as a plain
+    # Starlette route — FastAPI APIRouter routes assume their own
+    # middleware stack which the MCP top-level app doesn't provide.
     if ctx is not None:
         try:
-            meetgeek_router = make_meetgeek_router(ctx)
-            for route in meetgeek_router.routes:
-                app.router.routes.append(route)
+            meetgeek_handler = make_meetgeek_handler(ctx)
+            app.router.add_route(
+                "/meetgeek/webhook",
+                meetgeek_handler,
+                methods=["POST"],
+                name="meetgeek_webhook",
+            )
         except Exception:
             log.exception("meetgeek_router_failed")
 
