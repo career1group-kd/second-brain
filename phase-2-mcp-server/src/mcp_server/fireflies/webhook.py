@@ -116,7 +116,7 @@ def make_handler(
 
         log.info(
             "fireflies_received",
-            event=payload.get("event") if isinstance(payload, dict) else None,
+            ff_event=payload.get("event") if isinstance(payload, dict) else None,
             meeting_id=payload.get("meeting_id") if isinstance(payload, dict) else None,
         )
 
@@ -152,7 +152,7 @@ def _process(
     # retrying.
     event = payload.get("event") or ""
     if event and event != "meeting.summarized":
-        log.info("fireflies_skip_event", event=event, meeting_id=meeting_id)
+        log.info("fireflies_skip_event", ff_event=event, meeting_id=meeting_id)
         return {"ok": True, "skipped": True, "event": event}
 
     try:
