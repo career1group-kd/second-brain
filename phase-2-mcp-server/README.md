@@ -29,6 +29,9 @@ auth, fronted by Caddy for auto-TLS.
 `append_to_living_doc`, `update_section`, `create_note`, `append_to_person`,
 `update_person_meta`, `create_person`.
 
+**Meeting review** (Phase 5b):
+`list_meetings_needing_review`, `replace_speaker_in_transcript`.
+
 **Google Tasks** (Phase 4 — only registered when a token is present):
 `list_task_lists`, `list_tasks`, `create_task`, `complete_task`,
 `update_task`, `resolve_task_list`.

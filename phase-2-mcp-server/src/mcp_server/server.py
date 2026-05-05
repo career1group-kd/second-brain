@@ -27,6 +27,7 @@ from .oauth import build_oauth_provider
 from .qdrant_client import VaultIndex
 from .rerank_cache import RerankCache
 from .tools import gtasks as gtasks_tools
+from .tools import meetings as meetings_tools
 from .tools import people_read, vault_read, vault_write
 from .tools._common import ServerContext
 from .voyage import VoyageClient
@@ -258,6 +259,38 @@ def register_tools(mcp: FastMCP, ctx: ServerContext, gtasks: GoogleTasksClient |
         """Create a new person note in 70_People/."""
         return vault_write.create_person(
             ctx, name=name, frontmatter_data=frontmatter_data, content=content
+        )
+
+    # --- Meeting review (Phase 5b) ----------------------------------------
+
+    @mcp.tool()
+    def list_meetings_needing_review(
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict:
+        """Meeting notes still containing anonymous "Speaker N" labels.
+
+        Defaults to today only. Returns each meeting with three longest
+        utterance samples per anonymous speaker, the known attendees, and
+        a summary excerpt — enough context to identify who each speaker
+        was. Use `replace_speaker_in_transcript` to fix.
+        """
+        return meetings_tools.list_meetings_needing_review(
+            ctx, date_from=date_from, date_to=date_to
+        )
+
+    @mcp.tool()
+    def replace_speaker_in_transcript(
+        path: str, old_speaker: str, new_name: str
+    ) -> dict:
+        """Rewrite `**old_speaker**` lines to `**new_name**` in a meeting note.
+
+        If `new_name` resolves to an existing person note, also adds the
+        wikilink to attendees, removes from unrecognized_attendees, and
+        appends to the person's History.
+        """
+        return meetings_tools.replace_speaker_in_transcript(
+            ctx, path=path, old_speaker=old_speaker, new_name=new_name
         )
 
     # --- Google Tasks (Phase 4) -------------------------------------------
