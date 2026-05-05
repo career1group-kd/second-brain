@@ -41,6 +41,7 @@ dev = [
 [project.scripts]
 mcp-server = "mcp_server.server:main"
 gtasks-auth = "mcp_server.gtasks_cli:auth"
+gcal-auth = "mcp_server.gcal_cli:auth"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -18,6 +18,8 @@ from fastmcp.server.middleware import Middleware
 
 from .auth import BearerAuthMiddleware
 from .config import Settings, get_settings
+from .fireflies.webhook import make_handler as make_fireflies_handler
+from .gcal_client import GoogleCalendarClient
 from .gtasks_client import GoogleTasksClient
 from .logging_setup import setup_logging
 from .meetgeek.webhook import make_handler as make_meetgeek_handler
@@ -111,6 +113,19 @@ def _maybe_gtasks(settings: Settings) -> GoogleTasksClient | None:
         )
     except Exception:
         log.exception("gtasks_init_failed")
+        return None
+
+
+def _maybe_gcal(settings: Settings) -> GoogleCalendarClient | None:
+    if not settings.gcal_token_key or not settings.gcal_token_path.exists():
+        return None
+    try:
+        return GoogleCalendarClient(
+            token_path=settings.gcal_token_path,
+            token_key=settings.gcal_token_key,
+        )
+    except Exception:
+        log.exception("gcal_init_failed")
         return None
 
 
@@ -317,6 +332,10 @@ def _log_config_summary(settings: Settings) -> None:
         allowed_emails_count=len(settings.allowed_emails_set),
         gtasks_token_present=settings.gtasks_token_path.exists(),
         gtasks_key_set=bool(settings.gtasks_token_key),
+        gcal_token_present=settings.gcal_token_path.exists(),
+        gcal_key_set=bool(settings.gcal_token_key),
+        fireflies_api_key_set=bool(settings.fireflies_api_key),
+        fireflies_secret_set=bool(settings.fireflies_webhook_secret),
         public_domain=settings.public_domain,
         host=settings.host,
         port=settings.port,
@@ -433,6 +452,20 @@ def build_app(settings: Settings | None = None):
         except Exception:
             log.exception("meetgeek_router_failed")
 
+        try:
+            gcal_client = _maybe_gcal(settings)
+            if gcal_client is None:
+                log.info("gcal_disabled", reason="not configured or token missing")
+            fireflies_handler = make_fireflies_handler(ctx, calendar=gcal_client)
+            app.router.add_route(
+                "/fireflies/webhook",
+                fireflies_handler,
+                methods=["POST"],
+                name="fireflies_webhook",
+            )
+        except Exception:
+            log.exception("fireflies_router_failed")
+
     # Auth middleware selection:
     # - OAuth provider: FastMCP wires its own token verifier on MCP
     #   routes; we leave bearer middleware off entirely.
@@ -447,6 +480,7 @@ def build_app(settings: Settings | None = None):
             public_paths=(
                 "/health",
                 "/meetgeek/webhook",
+                "/fireflies/webhook",
                 "/favicon.ico",
                 "/favicon.svg",
             ),

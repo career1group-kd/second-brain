@@ -13,6 +13,7 @@ auth, fronted by Caddy for auto-TLS.
 | 3 — write + quality | `tools/vault_write.py`, `sections.py`, `atomic.py`, `frontmatter_io.py`, `schemas.py`, `rerank_cache.py` |
 | 4 — Google Tasks | `gtasks_client.py`, `gtasks_cli.py`, `tools/gtasks.py` |
 | 5 — MeetGeek webhook | `meetgeek/webhook.py`, `meetgeek/matcher.py`, `meetgeek/renderer.py`, `meetgeek/types.py` |
+| 5b — Fireflies webhook | `fireflies/webhook.py`, `fireflies/api.py`, `fireflies/resolver.py`, `fireflies/renderer.py`, `gcal_client.py`, `gcal_cli.py` |
 
 ## Tools registered
 
@@ -34,6 +35,7 @@ auth, fronted by Caddy for auto-TLS.
 
 **HTTP routes**:
 - `POST /meetgeek/webhook` (Phase 5) — MeetGeek delivery.
+- `POST /fireflies/webhook` (Phase 5b) — Fireflies v2 webhook (`X-Hub-Signature` HMAC-SHA256).
 - `GET /health` — liveness probe.
 - `/mcp` — MCP Streamable HTTP transport for Claude.ai and the Claude mobile apps.
 
@@ -47,6 +49,8 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|
 | ✓ | `VAULT_PATH`, `BEARER_TOKEN`, `VOYAGE_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION` |
 | Phase 4 | `GOOGLE_CLIENT_SECRETS_PATH`, `GTASKS_TOKEN_KEY` (Fernet) |
+| Phase 5 | `MEETGEEK_API_TOKEN` |
+| Phase 5b | `FIREFLIES_API_KEY`, `FIREFLIES_WEBHOOK_SECRET`, `GCAL_TOKEN_KEY` (Fernet) |
 
 Generate a Fernet key for Google Tasks:
 
@@ -63,6 +67,28 @@ gtasks-auth auth
 This opens a browser, completes the OAuth flow with the
 `https://www.googleapis.com/auth/tasks` scope, and persists an encrypted
 token at `GTASKS_TOKEN_PATH`.
+
+**Phase 5b — Fireflies + Google Calendar:**
+
+The Fireflies webhook needs a Calendar read-only token to map transcripts
+back to a calendar event (for title + attendee context — recovers names
+when the Mac app records anonymous "Speaker N" voices). The calendar
+lives in a different Google workspace from Tasks, so it has its own
+OAuth client secrets file (`GCAL_CLIENT_SECRETS_PATH`). Generate a second
+Fernet key for `GCAL_TOKEN_KEY`, then:
+
+```bash
+gcal-auth auth
+```
+
+scope: `https://www.googleapis.com/auth/calendar.events.readonly`.
+
+Register the Fireflies webhook at
+[app.fireflies.ai/integrations/api/webhook](https://app.fireflies.ai/integrations/api/webhook):
+URL `https://<PUBLIC_DOMAIN>/fireflies/webhook`, event
+`meeting.summarized`, optional signing secret → set as
+`FIREFLIES_WEBHOOK_SECRET`. The API key from the Fireflies developer
+settings goes to `FIREFLIES_API_KEY`.
 
 ### 2. Run locally
 
@@ -103,6 +129,7 @@ Coverage:
 - `test_vault.py` — path safety, frontmatter listing
 - `test_vault_write.py` — append/update flows + 100-thread concurrent appends
 - `test_meetgeek.py` — speaker matching, markdown rendering
+- `test_fireflies.py` — payload mapping, calendar+summary resolver, HMAC verification
 
 ## Compound flows
 

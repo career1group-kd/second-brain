@@ -25,6 +25,20 @@ if [[ -n "${GOOGLE_CLIENT_SECRETS_B64:-}" ]]; then
     chmod 600 "${GOOGLE_CLIENT_SECRETS_PATH:-/data/secrets/google_client_secret.json}"
 fi
 
+# Phase 5b — Calendar OAuth token (encrypted) and client secrets, for the
+# Fireflies webhook. Same base64-via-env trick because Railway can't mount
+# files.
+if [[ -n "${GCAL_TOKEN_B64:-}" ]]; then
+    echo "$GCAL_TOKEN_B64" | base64 -d > "${GCAL_TOKEN_PATH:-/data/secrets/gcal_token.enc}"
+    chmod 600 "${GCAL_TOKEN_PATH:-/data/secrets/gcal_token.enc}"
+fi
+
+if [[ -n "${GCAL_CLIENT_SECRETS_B64:-}" ]]; then
+    echo "$GCAL_CLIENT_SECRETS_B64" | base64 -d \
+        > "${GCAL_CLIENT_SECRETS_PATH:-/data/secrets/gcal_client_secret.json}"
+    chmod 600 "${GCAL_CLIENT_SECRETS_PATH:-/data/secrets/gcal_client_secret.json}"
+fi
+
 # Bootstrap the Qdrant collection idempotently.
 python -m ingestion.cli init || echo "WARN: qdrant init failed; will retry from watcher"
 

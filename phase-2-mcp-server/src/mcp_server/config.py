@@ -53,6 +53,18 @@ class Settings(BaseSettings):
     # Phase 5 — MeetGeek
     meetgeek_api_token: str = ""
 
+    # Phase 5b — Fireflies
+    fireflies_api_key: str = ""
+    fireflies_webhook_secret: str = ""
+
+    # Google Calendar (read-only) — used by the Fireflies resolver to map
+    # transcripts back to a calendar event for title + attendee context.
+    # Separate OAuth client from Tasks: the calendar lives in a different
+    # Google workspace, so we don't reuse google_client_secrets_path.
+    gcal_client_secrets_path: Path = Path("/data/secrets/gcal_client_secret.json")
+    gcal_token_path: Path = Path("/data/secrets/gcal_token.enc")
+    gcal_token_key: str = ""
+
     @property
     def allowed_emails_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
