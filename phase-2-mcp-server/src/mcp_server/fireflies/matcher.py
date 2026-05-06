@@ -4,7 +4,12 @@ Strategy:
 1. If the attendee has an email, match exactly (case-insensitive) against
    `frontmatter.email` of any person note.
 2. Otherwise, fuzzy-match the attendee name against the note title with
-   a rapidfuzz threshold of 85.
+   a `token_set_ratio` threshold of 85. We avoid `WRatio` here because
+   it scores high on a shared first name alone (e.g. "Christian
+   Reitersdorf" vs. "Christian Kühn" → 86), producing false positives
+   on common first names. `token_set_ratio` requires meaningful overlap
+   on the full token set while still tolerating word reordering and
+   missing middle names.
 """
 
 from __future__ import annotations
@@ -42,7 +47,7 @@ def match_attendees(
         best_score = 0
         best_path: str | None = None
         for title, path in titles:
-            score = fuzz.WRatio(att.name, title)
+            score = fuzz.token_set_ratio(att.name, title)
             if score > best_score:
                 best_score = score
                 best_path = path
