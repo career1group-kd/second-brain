@@ -38,6 +38,31 @@ log = structlog.get_logger()
 
 _NAME_TOKEN_RE = re.compile(r"\b([A-ZÄÖÜÉÈÀÂÊÎÔÛŠŽÇ][\wäöüéèàâêîôûšžç'’-]{1,})\b")
 _SPEAKER_N_RE = re.compile(r"^speaker[\s_-]*\d+$", re.IGNORECASE)
+_EMAIL_NAME_SEGMENT_RE = re.compile(
+    r"^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:-[A-Za-zÀ-ÖØ-öø-ÿ]+)*$"
+)
+
+
+def _name_from_email(email: str | None) -> str | None:
+    """Derive ``Vorname Nachname`` from a ``vorname.nachname@…`` address.
+
+    Only fires when the local part contains at least one dot and every
+    dot-separated segment is a pure-letter token (hyphens allowed). This
+    keeps `info@…`, `kay@…`, `kay+spam@…`, `7team@…` from producing
+    nonsensical display names.
+    """
+    if not email or "@" not in email:
+        return None
+    local = email.split("@", 1)[0]
+    if "." not in local:
+        return None
+    parts = local.split(".")
+    if not all(_EMAIL_NAME_SEGMENT_RE.match(p) for p in parts):
+        return None
+    return " ".join(
+        "-".join(sub[:1].upper() + sub[1:].lower() for sub in p.split("-"))
+        for p in parts
+    )
 
 
 @dataclass
@@ -153,7 +178,9 @@ def _hit_from_event(event: dict[str, Any], *, source: str) -> CalendarHit:
         if att.get("resource"):
             continue
         email = (att.get("email") or "").strip() or None
-        name = (att.get("displayName") or "").strip() or email
+        name = (att.get("displayName") or "").strip()
+        if not name:
+            name = _name_from_email(email) or email
         if not name:
             continue
         pairs.append((name, email))
