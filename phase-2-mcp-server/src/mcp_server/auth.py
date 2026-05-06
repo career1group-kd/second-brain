@@ -12,8 +12,8 @@ from starlette.responses import JSONResponse
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Reject requests whose Authorization header doesn't match the token.
 
-    Public paths (e.g. /health, /meetgeek/webhook) are allow-listed and use
-    their own auth.
+    Public paths (e.g. /health, /fireflies/webhook) are allow-listed and
+    use their own auth.
     """
 
     def __init__(self, app, token: str, public_paths: tuple[str, ...] = ()) -> None:

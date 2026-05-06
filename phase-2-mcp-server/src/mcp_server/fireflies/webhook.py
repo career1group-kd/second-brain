@@ -4,8 +4,7 @@ Webhook v2 sends `{event, timestamp, meeting_id, client_reference_id?}`
 and signs the body with `X-Hub-Signature: sha256=<hmac>` when a signing
 secret is configured. We verify, fetch the transcript via GraphQL, run
 the calendar+summary resolver to enrich speaker data, then render and
-write the meeting note (and update People notes) just like the MeetGeek
-pipeline.
+write the meeting note (and update People notes).
 """
 
 from __future__ import annotations
@@ -23,8 +22,8 @@ from starlette.responses import JSONResponse
 
 from .. import frontmatter_io, vault
 from ..atomic import atomic_write
-from ..meetgeek.matcher import match_attendees
-from ..meetgeek.types import MeetingPayload
+from .matcher import match_attendees
+from .types import MeetingPayload
 
 if TYPE_CHECKING:
     from ..gcal_client import GoogleCalendarClient

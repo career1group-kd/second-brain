@@ -2,7 +2,7 @@
 
 The single connector between [Claude.ai](https://claude.ai) and the Second
 Brain. Exposes vault read + write tools, person tools, Google Tasks tools,
-and accepts MeetGeek webhooks. Talks Streamable HTTP on `/mcp` with Bearer
+and accepts Fireflies webhooks. Talks Streamable HTTP on `/mcp` with Bearer
 auth, fronted by Caddy for auto-TLS.
 
 ## Phase coverage
@@ -12,8 +12,7 @@ auth, fronted by Caddy for auto-TLS.
 | 2 — read MVP | `tools/vault_read.py`, `tools/people_read.py`, `qdrant_client.py`, `voyage.py`, `vault.py` |
 | 3 — write + quality | `tools/vault_write.py`, `sections.py`, `atomic.py`, `frontmatter_io.py`, `schemas.py`, `rerank_cache.py` |
 | 4 — Google Tasks | `gtasks_client.py`, `gtasks_cli.py`, `tools/gtasks.py` |
-| 5 — MeetGeek webhook | `meetgeek/webhook.py`, `meetgeek/matcher.py`, `meetgeek/renderer.py`, `meetgeek/types.py` |
-| 5b — Fireflies webhook | `fireflies/webhook.py`, `fireflies/api.py`, `fireflies/resolver.py`, `fireflies/renderer.py`, `gcal_client.py`, `gcal_cli.py` |
+| 5 — Fireflies webhook | `fireflies/webhook.py`, `fireflies/api.py`, `fireflies/resolver.py`, `fireflies/renderer.py`, `fireflies/matcher.py`, `fireflies/types.py`, `gcal_client.py`, `gcal_cli.py` |
 
 ## Tools registered
 
@@ -29,7 +28,7 @@ auth, fronted by Caddy for auto-TLS.
 `append_to_living_doc`, `update_section`, `create_note`, `append_to_person`,
 `update_person_meta`, `create_person`.
 
-**Meeting review** (Phase 5b):
+**Meeting review** (Phase 5):
 `list_meetings_needing_review`, `replace_speaker_in_transcript`.
 
 **Google Tasks** (Phase 4 — only registered when a token is present):
@@ -37,8 +36,7 @@ auth, fronted by Caddy for auto-TLS.
 `update_task`, `resolve_task_list`.
 
 **HTTP routes**:
-- `POST /meetgeek/webhook` (Phase 5) — MeetGeek delivery.
-- `POST /fireflies/webhook` (Phase 5b) — Fireflies v2 webhook (`X-Hub-Signature` HMAC-SHA256).
+- `POST /fireflies/webhook` (Phase 5) — Fireflies v2 webhook (`X-Hub-Signature` HMAC-SHA256).
 - `GET /health` — liveness probe.
 - `/mcp` — MCP Streamable HTTP transport for Claude.ai and the Claude mobile apps.
 
@@ -52,8 +50,7 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|
 | ✓ | `VAULT_PATH`, `BEARER_TOKEN`, `VOYAGE_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION` |
 | Phase 4 | `GOOGLE_CLIENT_SECRETS_PATH`, `GTASKS_TOKEN_KEY` (Fernet) |
-| Phase 5 | `MEETGEEK_API_TOKEN` |
-| Phase 5b | `FIREFLIES_API_KEY`, `FIREFLIES_WEBHOOK_SECRET`, `GCAL_TOKEN_KEY` (Fernet) |
+| Phase 5 | `FIREFLIES_API_KEY`, `FIREFLIES_WEBHOOK_SECRET`, `GCAL_TOKEN_KEY` (Fernet) |
 
 Generate a Fernet key for Google Tasks:
 
@@ -71,7 +68,7 @@ This opens a browser, completes the OAuth flow with the
 `https://www.googleapis.com/auth/tasks` scope, and persists an encrypted
 token at `GTASKS_TOKEN_PATH`.
 
-**Phase 5b — Fireflies + Google Calendar:**
+**Phase 5 — Fireflies + Google Calendar:**
 
 The Fireflies webhook needs a Calendar read-only token to map transcripts
 back to a calendar event (for title + attendee context — recovers names
@@ -131,8 +128,7 @@ Coverage:
 - `test_rerank_cache.py` — LRU + TTL
 - `test_vault.py` — path safety, frontmatter listing
 - `test_vault_write.py` — append/update flows + 100-thread concurrent appends
-- `test_meetgeek.py` — speaker matching, markdown rendering
-- `test_fireflies.py` — payload mapping, calendar+summary resolver, HMAC verification
+- `test_fireflies.py` — payload mapping, speaker matching, calendar+summary resolver, HMAC verification
 
 ## Compound flows
 

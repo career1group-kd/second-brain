@@ -30,7 +30,7 @@ class MeetingFrontmatter(BaseModel):
     unrecognized_attendees: list[str] = Field(default_factory=list)
     meeting_type: str = "sync"
     duration_minutes: int = 0
-    meetgeek_id: str = ""
+    fireflies_id: str = ""
     language: str = "de"
     audio_url: str | None = None
     created: date

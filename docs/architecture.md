@@ -12,7 +12,7 @@ tags: [architecture, second-brain, obsidian, voyage, mcp, claude]
 
 ## TL;DR
 
-Selbst-gehostetes persistentes Gedächtnis für Claude. **Obsidian** = Source of Truth, **Voyage AI** = Embeddings & Reranking, **Qdrant** = Vector Store, **eigener MCP Server** verbindet alles mit Claude.ai. **MeetGeek** liefert Meeting-Transcripts ausschließlich per Webhook ins Vault (kein zweiter MCP-Connector). **People-Layer** lernt aus Meetings die Gesprächspartner. **Google Tasks** im selben MCP konsolidiert. Kern-Pattern: **Living Documents** pro Projekt und pro Person.
+Selbst-gehostetes persistentes Gedächtnis für Claude. **Obsidian** = Source of Truth, **Voyage AI** = Embeddings & Reranking, **Qdrant** = Vector Store, **eigener MCP Server** verbindet alles mit Claude.ai. **Fireflies** liefert Meeting-Transcripts ausschließlich per Webhook ins Vault (kein zweiter MCP-Connector). **People-Layer** lernt aus Meetings die Gesprächspartner. **Google Tasks** im selben MCP konsolidiert. Kern-Pattern: **Living Documents** pro Projekt und pro Person.
 
 **Was es nicht ist:** Kein CRM-Mirror, keine n8n-Workflow-Engine, kein HubSpot-Sync, kein zweiter Connector. Eine Schnittstelle Claude ↔ unser MCP, fertig.
 
@@ -44,7 +44,7 @@ flowchart LR
 
     subgraph Meet["Meetings"]
         Call["Google Meet /<br/>Zoom / Teams"]
-        MGBot["MeetGeek<br/>Bot oder Chrome Ext"]
+        MGBot["Fireflies<br/>Bot oder Chrome Ext"]
     end
 
     subgraph Server["Self-hosted Server"]
@@ -60,7 +60,7 @@ flowchart LR
     subgraph External["External APIs"]
         Voyage["Voyage AI"]
         Google["Google Tasks"]
-        MGAPI["MeetGeek API"]
+        MGAPI["Fireflies API"]
         ClaudeAI["Claude.ai / App"]
     end
 
@@ -83,7 +83,7 @@ flowchart LR
     MCP -.->|tasks| Google
 ```
 
-Eine Schnittstelle in Claude.ai. MeetGeek bleibt reine Datenquelle hinter dem Webhook.
+Eine Schnittstelle in Claude.ai. Fireflies bleibt reine Datenquelle hinter dem Webhook.
 
 ---
 
@@ -121,7 +121,7 @@ Python + FastMCP, Docker, Caddy mit TLS und Bearer-Auth. Tool-Gruppen: **Vault**
 
 ### 2.6 Meeting Ingestion Service
 
-FastAPI-Service neben dem MCP Server. Nimmt MeetGeek-Webhooks entgegen, rendert Markdown, macht Speaker-Matching, schreibt ins Vault. Watcher übernimmt von dort.
+Starlette-Route auf dem MCP-Server (`POST /fireflies/webhook`). Verifiziert die HMAC-Signatur, holt das Transcript per GraphQL, mappt Speaker via Calendar+Summary auf echte Namen, rendert Markdown und schreibt ins Vault. Watcher übernimmt von dort.
 
 ### 2.7 Claude.ai Integration
 
@@ -153,7 +153,7 @@ Pro relevanter Person eine Living Note in `70_People/`. Speaker aus Meeting-Tran
 | Insight speichern | „merk dir das" | `append_to_living_doc` |
 | Person-Update | „Anna ist jetzt VP" | `append_to_person` + Frontmatter-Update |
 | TODO erfassen | „füg das als Aufgabe hinzu" | `create_task` + Living Doc |
-| Meeting eingeht | Nach Meeting-Ende | MeetGeek → Webhook → Ingestion → Vault |
+| Meeting eingeht | Nach Meeting-Ende | Fireflies → Webhook → Ingestion → Vault |
 
 ---
 
@@ -166,7 +166,7 @@ Pro relevanter Person eine Living Note in `70_People/`. Speaker aus Meeting-Tran
 | **2** | MCP Server MVP (Read-Tools für Vault & People) | 1–2 Tage |
 | **3** | Write-Layer + Quality (Hybrid Search, Rerank, Write-Tools) | 2–3 Tage |
 | **4** | Google Tasks (OAuth2, Tools, Living-Doc-Mapping) | 1–2 Tage |
-| **5** | MeetGeek Integration (Webhook, Speaker-Matcher, Renderer) | 2–3 Tage |
+| **5** | Fireflies Integration (Webhook, GraphQL-Fetch, Speaker-Resolver, Renderer) | 2–3 Tage |
 | **6** | Optional Polish (find_related, Multimodal, Bootstrap) | laufend |
 
 ---
@@ -183,7 +183,7 @@ Pro relevanter Person eine Living Note in `70_People/`. Speaker aus Meeting-Tran
 | MCP Framework | FastMCP (Python) |
 | Watcher | watchdog |
 | Tasks-API | Google Tasks REST + OAuth2 |
-| Meeting-Tool | MeetGeek (Webhook-only) |
+| Meeting-Tool | Fireflies (Webhook-only) |
 | Hosting | Docker auf Self-hosted Server |
 | Reverse Proxy | Caddy (auto-TLS) |
 

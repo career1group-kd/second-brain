@@ -1,8 +1,7 @@
 """Render a Fireflies-derived MeetingPayload into a markdown meeting note.
 
-Mirrors meetgeek/renderer.py but writes `fireflies_id` (instead of
-`meetgeek_id`) to the frontmatter and supports a speaker-to-name override
-map produced by the resolver.
+Writes `fireflies_id` to the frontmatter and supports a speaker-to-name
+override map produced by the resolver.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from typing import Any
 from slugify import slugify
 
 from .. import frontmatter_io
-from ..meetgeek.types import MatchResult, MeetingPayload
+from .types import MatchResult, MeetingPayload
 
 
 def _today() -> date:

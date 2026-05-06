@@ -12,8 +12,8 @@ from mcp_server.fireflies.api import to_meeting_payload
 from mcp_server.fireflies.renderer import render_meeting
 from mcp_server.fireflies.resolver import resolve_meeting
 from mcp_server.fireflies.webhook import _verify_signature
-from mcp_server.meetgeek.matcher import match_attendees
-from mcp_server.meetgeek.types import MeetingPayload
+from mcp_server.fireflies.matcher import match_attendees
+from mcp_server.fireflies.types import MeetingPayload
 
 
 # ---- payload mapping ----------------------------------------------------

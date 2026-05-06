@@ -31,8 +31,8 @@ Three services in one project, sharing Railway's private network:
                                   https://<public>.up.railway.app
                                             │
                                             ▼
-                             Claude.ai Custom Connector (SSE)
-                             MeetGeek webhook (POST /meetgeek/webhook)
+                             Claude.ai Custom Connector (Streamable HTTP)
+                             Fireflies webhook (POST /fireflies/webhook)
                              Obsidian devices (LiveSync to CouchDB)
 ```
 
@@ -48,8 +48,8 @@ Before you start, gather:
 | What | Where | Why |
 |---|---|---|
 | Voyage AI API key | https://dashboard.voyageai.com | Embeddings + reranking |
-| MeetGeek webhook secret | (you choose) | Bearer for `POST /meetgeek/webhook` |
-| Bearer token for Claude.ai | (you choose, 32+ chars) | Auth for the SSE endpoint |
+| Fireflies API key + webhook secret | https://app.fireflies.ai/integrations/api | Transcript fetch + HMAC verification |
+| Bearer token for Claude.ai | (you choose, 32+ chars) | Auth for the `/mcp` endpoint |
 | CouchDB admin password | (you choose) | Admin login for LiveSync |
 | Fernet key for Google Tasks | generated locally | Encrypts the OAuth token |
 | Google OAuth `client_secret.json` | https://console.cloud.google.com | Tasks API client |
@@ -199,16 +199,16 @@ them in Qdrant.
 3. Auth: **Bearer**, token = your `BEARER_TOKEN`.
 4. Save. The 16+ tools should appear in the conversation tool picker.
 
-## Step 8 — Configure MeetGeek
+## Step 8 — Configure Fireflies
 
-1. MeetGeek → Settings → Integrations → Webhooks → **Add Webhook**.
-2. URL: `https://<your-second-brain-public-url>/meetgeek/webhook`
-3. Event: meeting completed.
-4. Test delivery → check Railway logs for `meetgeek_processed`.
-
-The endpoint is unauthenticated — the URL itself is the only secret.
-Treat it accordingly (don't share, rotate by redeploying with a different
-public domain if it ever leaks).
+1. Fireflies → Integrations → **API & Webhook** → Add webhook.
+2. URL: `https://<your-second-brain-public-url>/fireflies/webhook`
+3. Event: `meeting.summarized` (the only event the handler acts on —
+   `meeting.transcribed` fires before the summary is ready).
+4. Signing secret: paste the value of `FIREFLIES_WEBHOOK_SECRET`. The
+   handler verifies the `X-Hub-Signature: sha256=<hex>` header on every
+   request.
+5. Test delivery → check Railway logs for `fireflies_processed`.
 
 ## Verifying
 

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from ..meetgeek.types import Attendee, MeetingPayload
+from .types import Attendee, MeetingPayload
 
 if TYPE_CHECKING:
     from ..gcal_client import GoogleCalendarClient

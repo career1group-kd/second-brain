@@ -157,11 +157,7 @@ def _action_items(summary: dict[str, Any] | None) -> list[str]:
 
 
 def to_meeting_payload(transcript: dict[str, Any]) -> dict[str, Any]:
-    """Map a Fireflies transcript into the same shape as MeetingPayload.
-
-    Reuses the meetgeek MeetingPayload model so the matcher and renderer
-    work unchanged.
-    """
+    """Map a Fireflies transcript into the same shape as MeetingPayload."""
     started_at: datetime | None = None
     date_str = transcript.get("dateString")
     if date_str:

@@ -2,7 +2,8 @@
 
 Registers all tool groups (vault read/write, people, Google Tasks) on a
 FastMCP instance, mounts it under /mcp (Streamable HTTP), adds Bearer auth
-middleware, and attaches the MeetGeek webhook router under /meetgeek/webhook.
+middleware, and attaches the Fireflies webhook router under
+`/fireflies/webhook`.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from .fireflies.webhook import make_handler as make_fireflies_handler
 from .gcal_client import GoogleCalendarClient
 from .gtasks_client import GoogleTasksClient
 from .logging_setup import setup_logging
-from .meetgeek.webhook import make_handler as make_meetgeek_handler
 from .oauth import build_oauth_provider
 from .qdrant_client import VaultIndex
 from .rerank_cache import RerankCache
@@ -470,21 +470,10 @@ def build_app(settings: Settings | None = None):
     app.router.add_route("/favicon.ico", _favicon, methods=["GET"], name="favicon_ico")
     app.router.add_route("/favicon.svg", _favicon, methods=["GET"], name="favicon_svg")
 
-    # MeetGeek webhook only if context exists. Registered as a plain
+    # Fireflies webhook only if context exists. Registered as a plain
     # Starlette route — FastAPI APIRouter routes assume their own
     # middleware stack which the MCP top-level app doesn't provide.
     if ctx is not None:
-        try:
-            meetgeek_handler = make_meetgeek_handler(ctx)
-            app.router.add_route(
-                "/meetgeek/webhook",
-                meetgeek_handler,
-                methods=["POST"],
-                name="meetgeek_webhook",
-            )
-        except Exception:
-            log.exception("meetgeek_router_failed")
-
         try:
             gcal_client = _maybe_gcal(settings)
             if gcal_client is None:
@@ -512,7 +501,6 @@ def build_app(settings: Settings | None = None):
             token=settings.bearer_token,
             public_paths=(
                 "/health",
-                "/meetgeek/webhook",
                 "/fireflies/webhook",
                 "/favicon.ico",
                 "/favicon.svg",

@@ -80,7 +80,7 @@ TEMPLATE_MEETING = dedent("""\
     unrecognized_attendees: []
     meeting_type: "sync"
     duration_minutes: 0
-    meetgeek_id: ""
+    fireflies_id: ""
     language: "de"
     created: <% tp.date.now("YYYY-MM-DD") %>
     updated: <% tp.date.now("YYYY-MM-DD") %>
@@ -219,7 +219,7 @@ VAULT_CONVENTION = dedent("""\
     unrecognized_attendees: ["John Doe"]
     meeting_type: "sync"
     duration_minutes: 30
-    meetgeek_id: "abc123"
+    fireflies_id: "abc123"
     language: "de"
     ```
 
@@ -344,10 +344,10 @@ DSGVO_CONVENTION = dedent("""\
       then walk linked meeting notes and remove the person from the
       `attendees` frontmatter; the meeting itself stays.
 
-    ## MeetGeek consent
+    ## Recording consent
 
-    The MeetGeek bot informs participants automatically that the meeting is
-    being recorded and transcribed. Hosting the vault privately is
+    The Fireflies bot informs participants automatically that the meeting
+    is being recorded and transcribed. Hosting the vault privately is
     legitimate-interest-compatible as long as participants are informed.
     Document any opt-outs in the meeting note's `unrecognized_attendees:`
     field with a note `# opted out` and skip person creation for them.

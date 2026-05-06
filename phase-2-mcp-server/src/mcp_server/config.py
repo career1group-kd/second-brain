@@ -50,10 +50,7 @@ class Settings(BaseSettings):
     gtasks_token_path: Path = Path("/data/secrets/gtasks_token.enc")
     gtasks_token_key: str = ""
 
-    # Phase 5 — MeetGeek
-    meetgeek_api_token: str = ""
-
-    # Phase 5b — Fireflies
+    # Phase 5 — Fireflies
     fireflies_api_key: str = ""
     fireflies_webhook_secret: str = ""
 
