@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 from mcp_server.fireflies.api import to_meeting_payload
 from mcp_server.fireflies.renderer import render_meeting
-from mcp_server.fireflies.resolver import resolve_meeting
+from mcp_server.fireflies.resolver import resolve_meeting, strip_self_attendees
 from mcp_server.fireflies.webhook import _verify_signature
 from mcp_server.fireflies.matcher import match_attendees
 from mcp_server.fireflies.types import MeetingPayload
@@ -170,6 +170,32 @@ def test_resolver_no_calendar_no_summary_no_assignment():
     payload = MeetingPayload(**mapped)
     out = resolve_meeting(payload, calendar=None, raw_transcript=None)
     assert out.speaker_to_name == {}
+
+
+# ---- strip_self_attendees ----------------------------------------------
+
+
+def test_strip_self_drops_by_email_and_derived_name():
+    from mcp_server.fireflies.types import Attendee
+
+    attendees = [
+        Attendee(name="Kay Dollt", email="kay.dollt@career1group.com"),
+        Attendee(name="kay.dollt@ktd-holding.de", email="kay.dollt@ktd-holding.de"),
+        Attendee(name="Kay Dollt", email=None),  # transcript-speaker entry
+        Attendee(name="Tim Schendzielorz", email=None),
+        Attendee(name="Tristan Otto", email="tristan@example.com"),
+    ]
+    self_emails = {"kay.dollt@career1group.com", "kay.dollt@ktd-holding.de"}
+    out = strip_self_attendees(attendees, self_emails)
+    names = [a.name for a in out]
+    assert names == ["Tim Schendzielorz", "Tristan Otto"]
+
+
+def test_strip_self_no_emails_is_passthrough():
+    from mcp_server.fireflies.types import Attendee
+
+    attendees = [Attendee(name="Anna Schmidt", email="anna@x.de")]
+    assert strip_self_attendees(attendees, set()) == attendees
 
 
 # ---- renderer -----------------------------------------------------------

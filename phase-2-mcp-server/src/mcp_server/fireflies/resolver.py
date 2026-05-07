@@ -169,6 +169,32 @@ def resolve_meeting(
     return out
 
 
+def strip_self_attendees(
+    attendees: list[Attendee], self_emails: set[str]
+) -> list[Attendee]:
+    """Drop the vault owner from an attendee list.
+
+    Filters by exact email match and by lowered display name derived from
+    each self-email (so a name-only attendee like "Kay Dollt" — added by
+    the resolver from a transcript speaker — also disappears).
+    """
+    if not self_emails:
+        return list(attendees)
+    self_names: set[str] = set()
+    for em in self_emails:
+        derived = _name_from_email(em)
+        if derived:
+            self_names.add(derived.lower())
+    out: list[Attendee] = []
+    for att in attendees:
+        if (att.email or "").strip().lower() in self_emails:
+            continue
+        if not att.email and att.name.strip().lower() in self_names:
+            continue
+        out.append(att)
+    return out
+
+
 def _hit_from_event(event: dict[str, Any], *, source: str) -> CalendarHit:
     title = (event.get("summary") or "").strip()
     pairs: list[tuple[str, str | None]] = []

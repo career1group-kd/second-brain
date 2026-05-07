@@ -32,7 +32,7 @@ from ..tools.vault_read import list_active_projects
 from ..tools.vault_write import append_to_person, update_person_meta
 from .api import FirefliesError, fetch_transcript, to_meeting_payload
 from .renderer import render_meeting
-from .resolver import resolve_meeting
+from .resolver import resolve_meeting, strip_self_attendees
 
 log = structlog.get_logger()
 
@@ -181,6 +181,12 @@ def _process(
         meeting = meeting.model_copy(update={"title": resolved.title_override})
     if resolved.attendees:
         meeting = meeting.model_copy(update={"attendees": resolved.attendees})
+
+    self_emails = settings.fireflies_self_emails_set
+    if self_emails:
+        meeting = meeting.model_copy(
+            update={"attendees": strip_self_attendees(meeting.attendees, self_emails)}
+        )
 
     log.info(
         "fireflies_resolved",

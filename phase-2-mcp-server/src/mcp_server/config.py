@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # Phase 5 — Fireflies
     fireflies_api_key: str = ""
     fireflies_webhook_secret: str = ""
+    # Comma-separated emails that identify the vault owner across the
+    # meetings they attend. Attendees matching one of these (by email or by
+    # display-name derived from the email) are stripped before the matcher
+    # runs so the owner doesn't show up as "unrecognized" on every meeting.
+    fireflies_self_emails: str = ""
 
     # Google Calendar (read-only) — used by the Fireflies resolver to map
     # transcripts back to a calendar event for title + attendee context.
@@ -65,6 +70,14 @@ class Settings(BaseSettings):
     @property
     def allowed_emails_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
+    @property
+    def fireflies_self_emails_set(self) -> set[str]:
+        return {
+            e.strip().lower()
+            for e in self.fireflies_self_emails.split(",")
+            if e.strip()
+        }
 
     @property
     def google_oauth_enabled(self) -> bool:
