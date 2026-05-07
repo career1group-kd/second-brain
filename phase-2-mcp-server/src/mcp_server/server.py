@@ -261,6 +261,28 @@ def register_tools(mcp: FastMCP, ctx: ServerContext, gtasks: GoogleTasksClient |
             ctx, name=name, frontmatter_data=frontmatter_data, content=content
         )
 
+    @mcp.tool()
+    def move_note(src: str, dst: str, force: bool = False) -> dict:
+        """Move a note from `src` to `dst` within the vault.
+
+        Atomic rename. When `force=False` (default) the call fails with
+        `EXISTS` if `dst` is already a file — set `force=True` to
+        overwrite. Inbound wikilinks are NOT rewritten; check
+        references with `search_notes` if needed before moving.
+        """
+        return vault_write.move_note(ctx, src=src, dst=dst, force=force)
+
+    @mcp.tool()
+    def delete_note(path: str, hard: bool = False) -> dict:
+        """Delete a note. Default soft-deletes into `.trash/` for undo.
+
+        With `hard=False` (default) the file is moved to
+        `.trash/<UTC-timestamp>__<flattened-path>`. With `hard=True`
+        it's unlinked permanently — no recovery. Use the soft default
+        unless you really want it gone.
+        """
+        return vault_write.delete_note(ctx, path=path, hard=hard)
+
     # --- Meeting review (Phase 5b) ----------------------------------------
 
     @mcp.tool()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,12 @@ from ..atomic import ConflictError, file_lock, safe_overwrite
 from ..schemas import validate_frontmatter
 from ..vault import PathTraversalError, safe_join
 from ._common import ServerContext, fuzzy_match_living_doc, fuzzy_match_person
+
+# Soft-delete target: notes moved here on `delete_note` without `hard=True`.
+# Lives inside the vault so the existing backup/sync covers it. Stamped
+# filenames keep multiple deletions of the same path from clobbering each
+# other.
+_TRASH_DIR = ".trash"
 
 log = structlog.get_logger()
 
@@ -239,3 +245,100 @@ def create_person(
         content=body,
         force=False,
     )
+
+
+def move_note(
+    ctx: ServerContext,
+    *,
+    src: str,
+    dst: str,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Move a note from `src` to `dst` within the vault.
+
+    Both paths are resolved through `safe_join` (no traversal outside the
+    vault) and the rename is performed via `os.replace`, which is atomic
+    on the same filesystem. When `force=True` an existing `dst` is
+    overwritten; otherwise the call returns `EXISTS`.
+
+    Note: inbound wikilinks (`[[old/path]]`) are NOT rewritten — moving
+    a note can break references from other notes. Use this consciously,
+    or follow up with a search/replace.
+    """
+    try:
+        src_abs = safe_join(ctx.settings.vault_path, src)
+        dst_abs = safe_join(ctx.settings.vault_path, dst)
+    except PathTraversalError as e:
+        return {"error": str(e), "code": "INVALID_PATH"}
+
+    if not src_abs.is_file():
+        return {"error": "source note not found", "code": "NOT_FOUND"}
+    if src_abs.resolve() == dst_abs.resolve():
+        return {"error": "src and dst are the same path", "code": "INVALID_PATH"}
+    if dst_abs.exists() and not force:
+        return {"error": "destination already exists", "code": "EXISTS"}
+
+    dst_abs.parent.mkdir(parents=True, exist_ok=True)
+    # Lock the source while we rename so nothing else mutates it mid-flight.
+    with file_lock(src_abs):
+        import os as _os
+
+        _os.replace(src_abs, dst_abs)
+    log.info("note_moved", src=src, dst=dst, force=force)
+    return {"ok": True, "src": src, "dst": dst}
+
+
+def delete_note(
+    ctx: ServerContext,
+    *,
+    path: str,
+    hard: bool = False,
+) -> dict[str, Any]:
+    """Delete a note. Default soft-deletes into `.trash/` for undo.
+
+    With `hard=False` (default) the file is moved to
+    `<vault>/.trash/<YYYYMMDDTHHMMSSZ>__<sanitised-original-path>` so it
+    can be restored by hand. With `hard=True` the file is unlinked
+    permanently — no recovery.
+
+    The trash directory is intentionally inside the vault so it travels
+    with whatever backup/sync setup you already have in place.
+    """
+    try:
+        abs_path = safe_join(ctx.settings.vault_path, path)
+    except PathTraversalError as e:
+        return {"error": str(e), "code": "INVALID_PATH"}
+
+    if not abs_path.is_file():
+        return {"error": "note not found", "code": "NOT_FOUND"}
+
+    # Refuse to "delete" anything already inside the trash via this tool —
+    # that would either be a no-op (soft) or would silently bypass the
+    # safety net (hard). Force the caller to be explicit if they really
+    # want to purge.
+    rel_norm = path.replace("\\", "/").lstrip("/")
+    if rel_norm.startswith(f"{_TRASH_DIR}/") and not hard:
+        return {
+            "error": "note is already in trash; pass hard=True to purge",
+            "code": "ALREADY_TRASHED",
+        }
+
+    if hard:
+        with file_lock(abs_path):
+            abs_path.unlink()
+        log.info("note_deleted_hard", path=path)
+        return {"ok": True, "path": path, "hard": True}
+
+    # Soft-delete: move to .trash with a UTC timestamp prefix and the
+    # original relative path flattened so collisions are impossible.
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    flat = rel_norm.replace("/", "__")
+    trash_rel = f"{_TRASH_DIR}/{stamp}__{flat}"
+    trash_abs = safe_join(ctx.settings.vault_path, trash_rel)
+    trash_abs.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(abs_path):
+        import os as _os
+
+        _os.replace(abs_path, trash_abs)
+    log.info("note_deleted_soft", path=path, trash_path=trash_rel)
+    return {"ok": True, "path": path, "trash_path": trash_rel, "hard": False}

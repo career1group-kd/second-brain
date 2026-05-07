@@ -116,6 +116,158 @@ def test_create_note_validates_frontmatter(fixture_vault: Path) -> None:
     assert res.get("code") == "INVALID_FRONTMATTER"
 
 
+# --- move_note / delete_note ----------------------------------------------
+# These use a self-contained tmp_path layout (no fixture_vault dependency)
+# so they run even when the fixture vault directory is absent.
+
+
+def _seed_note(root: Path, rel: str, body: str = "x") -> Path:
+    abs_path = root / rel
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    abs_path.write_text(body)
+    return abs_path
+
+
+def test_move_note_renames_file(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md", "anna")
+    res = vault_write.move_note(
+        ctx, src="70_People/Anna Schmidt.md", dst="70_People/Anna S.md"
+    )
+    assert res.get("ok") is True
+    assert not (tmp_path / "70_People" / "Anna Schmidt.md").exists()
+    assert (tmp_path / "70_People" / "Anna S.md").read_text() == "anna"
+
+
+def test_move_note_to_new_subdir(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md")
+    res = vault_write.move_note(
+        ctx,
+        src="70_People/Anna Schmidt.md",
+        dst="80_Archive/Anna Schmidt.md",
+    )
+    assert res.get("ok") is True
+    assert (tmp_path / "80_Archive" / "Anna Schmidt.md").is_file()
+
+
+def test_move_note_rejects_existing_dst(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md", "src")
+    _seed_note(tmp_path, "10_Projects/ChapterNext.md", "existing")
+    res = vault_write.move_note(
+        ctx,
+        src="70_People/Anna Schmidt.md",
+        dst="10_Projects/ChapterNext.md",
+    )
+    assert res.get("code") == "EXISTS"
+    # Both files untouched
+    assert (tmp_path / "70_People" / "Anna Schmidt.md").read_text() == "src"
+    assert (tmp_path / "10_Projects" / "ChapterNext.md").read_text() == "existing"
+
+
+def test_move_note_force_overwrites(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md", "new")
+    _seed_note(tmp_path, "10_Projects/ChapterNext.md", "old")
+    res = vault_write.move_note(
+        ctx,
+        src="70_People/Anna Schmidt.md",
+        dst="10_Projects/ChapterNext.md",
+        force=True,
+    )
+    assert res.get("ok") is True
+    assert (tmp_path / "10_Projects" / "ChapterNext.md").read_text() == "new"
+    assert not (tmp_path / "70_People" / "Anna Schmidt.md").exists()
+
+
+def test_move_note_missing_src(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    res = vault_write.move_note(
+        ctx, src="70_People/Nobody.md", dst="70_People/Somebody.md"
+    )
+    assert res.get("code") == "NOT_FOUND"
+
+
+def test_move_note_blocks_traversal(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md")
+    res = vault_write.move_note(
+        ctx, src="70_People/Anna Schmidt.md", dst="../escape.md"
+    )
+    assert res.get("code") == "INVALID_PATH"
+    # Source untouched
+    assert (tmp_path / "70_People" / "Anna Schmidt.md").is_file()
+
+
+def test_move_note_same_path(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md")
+    res = vault_write.move_note(
+        ctx,
+        src="70_People/Anna Schmidt.md",
+        dst="70_People/Anna Schmidt.md",
+    )
+    assert res.get("code") == "INVALID_PATH"
+    assert (tmp_path / "70_People" / "Anna Schmidt.md").is_file()
+
+
+def test_delete_note_soft_moves_to_trash(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md", "body")
+    res = vault_write.delete_note(ctx, path="70_People/Anna Schmidt.md")
+    assert res.get("ok") is True
+    assert res.get("hard") is False
+    assert not (tmp_path / "70_People" / "Anna Schmidt.md").exists()
+    trash_rel = res["trash_path"]
+    assert trash_rel.startswith(".trash/")
+    trash_abs = tmp_path / trash_rel
+    assert trash_abs.is_file()
+    assert trash_abs.read_text() == "body"
+    # Flattened original path is preserved in the filename
+    assert "70_People__Anna Schmidt.md" in trash_rel
+
+
+def test_delete_note_hard_unlinks(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md")
+    res = vault_write.delete_note(
+        ctx, path="70_People/Anna Schmidt.md", hard=True
+    )
+    assert res.get("ok") is True
+    assert res.get("hard") is True
+    assert not (tmp_path / "70_People" / "Anna Schmidt.md").exists()
+    # No trash artefact created
+    assert not (tmp_path / ".trash").exists()
+
+
+def test_delete_note_missing(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    res = vault_write.delete_note(ctx, path="70_People/Nobody.md")
+    assert res.get("code") == "NOT_FOUND"
+
+
+def test_delete_note_blocks_traversal(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    res = vault_write.delete_note(ctx, path="../etc/passwd")
+    assert res.get("code") == "INVALID_PATH"
+
+
+def test_delete_note_already_trashed_blocked_without_hard(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _seed_note(tmp_path, "70_People/Anna Schmidt.md")
+    first = vault_write.delete_note(ctx, path="70_People/Anna Schmidt.md")
+    trash_rel = first["trash_path"]
+    # Second soft-delete attempt on the trashed file should refuse
+    second = vault_write.delete_note(ctx, path=trash_rel)
+    assert second.get("code") == "ALREADY_TRASHED"
+    assert (tmp_path / trash_rel).is_file()
+    # hard=True does purge the trashed file
+    purge = vault_write.delete_note(ctx, path=trash_rel, hard=True)
+    assert purge.get("ok") is True
+    assert not (tmp_path / trash_rel).exists()
+
+
 def test_concurrent_appends_no_loss(fixture_vault: Path) -> None:
     """100 appends to the same Living Doc should produce 100 entries with no
     corruption (each entry must appear in the final file)."""
